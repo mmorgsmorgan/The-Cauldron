@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseEther, zeroHash } from "viem";
+import { isAddress, parseEther, zeroHash } from "viem";
 import { FACTORY_ADDRESS, NFTFactory_ABI } from "@/lib/contracts";
 import { generateMerkleRoot } from "@/lib/api";
 
@@ -18,10 +18,10 @@ export default function CreatePage() {
 
   const [gtdPrice, setGtdPrice] = useState("0.01");
   const [gtdMaxPerWallet, setGtdMaxPerWallet] = useState("3");
-  const [gtdDuration, setGtdDuration] = useState("3600");
+  const [gtdDuration, setGtdDuration] = useState("1"); // hours
   const [publicPrice, setPublicPrice] = useState("0.02");
   const [publicMaxPerWallet, setPublicMaxPerWallet] = useState("5");
-  const [publicDuration, setPublicDuration] = useState("7200");
+  const [publicDuration, setPublicDuration] = useState("2"); // hours
 
   const [allowlistCSV, setAllowlistCSV] = useState("");
   const [merkleRoot, setMerkleRoot] = useState<`0x${string}`>(zeroHash);
@@ -31,7 +31,7 @@ export default function CreatePage() {
 
   async function handleGenerateMerkle() {
     if (!allowlistCSV.trim()) return;
-    const addresses = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(a => a.startsWith("0x"));
+    const addresses = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(isAddress);
     if (addresses.length === 0) return alert("No valid addresses");
     try {
       const result = await generateMerkleRoot(addresses);
@@ -42,14 +42,21 @@ export default function CreatePage() {
 
   function handleDeploy() {
     if (!isConnected || !address) return;
-    const now = Math.floor(Date.now() / 1000);
+    if (merkleRoot === zeroHash) {
+      alert("Generate an allowlist root before deploying a GTD phase, or switch to public-only.");
+      return;
+    }
+    const now = Date.now(); // Ritual Chain uses milliseconds
+    const gtdMs = Math.round(parseFloat(gtdDuration) * 3600 * 1000);
+    const publicMs = Math.round(parseFloat(publicDuration) * 3600 * 1000);
     const phases = [
-      { startTime: BigInt(now), endTime: BigInt(now + parseInt(gtdDuration)), price: parseEther(gtdPrice), maxPerWallet: parseInt(gtdMaxPerWallet), merkleRoot, isPublic: false },
-      { startTime: BigInt(now + parseInt(gtdDuration)), endTime: BigInt(now + parseInt(gtdDuration) + parseInt(publicDuration)), price: parseEther(publicPrice), maxPerWallet: parseInt(publicMaxPerWallet), merkleRoot: zeroHash, isPublic: true },
+      { startTime: BigInt(now), endTime: BigInt(now + gtdMs), price: parseEther(gtdPrice), maxPerWallet: parseInt(gtdMaxPerWallet), merkleRoot, isPublic: false },
+      { startTime: BigInt(now + gtdMs), endTime: BigInt(now + gtdMs + publicMs), price: parseEther(publicPrice), maxPerWallet: parseInt(publicMaxPerWallet), merkleRoot: zeroHash, isPublic: true },
     ];
     writeContract({
       address: FACTORY_ADDRESS, abi: NFTFactory_ABI, functionName: "createCollection",
       args: [name, symbol, baseURI, BigInt(maxSupply), address, BigInt(Math.round(parseFloat(royaltyFee) * 100)), phases],
+      gas: 500000n,
     });
   }
 
@@ -109,7 +116,7 @@ export default function CreatePage() {
           <div className="grid grid-cols-3 gap-4">
             <Field label="PRICE" value={gtdPrice} onChange={setGtdPrice} type="number" />
             <Field label="MAX/WALLET" value={gtdMaxPerWallet} onChange={setGtdMaxPerWallet} type="number" />
-            <Field label="DURATION (S)" value={gtdDuration} onChange={setGtdDuration} type="number" />
+            <Field label="DURATION (HRS)" value={gtdDuration} onChange={setGtdDuration} type="number" />
           </div>
           <div>
             <label className="block text-xs font-bold tracking-widest mb-2" style={{ color: "rgba(200,247,197,0.4)" }}>ALLOWLIST</label>
@@ -123,7 +130,7 @@ export default function CreatePage() {
           <div className="grid grid-cols-3 gap-4">
             <Field label="PRICE" value={publicPrice} onChange={setPublicPrice} type="number" />
             <Field label="MAX/WALLET" value={publicMaxPerWallet} onChange={setPublicMaxPerWallet} type="number" />
-            <Field label="DURATION (S)" value={publicDuration} onChange={setPublicDuration} type="number" />
+            <Field label="DURATION (HRS)" value={publicDuration} onChange={setPublicDuration} type="number" />
           </div>
           <div className="flex gap-3">
             <button className="btn-secondary flex-1 font-black" onClick={() => setStep(1)}>← BACK</button>
