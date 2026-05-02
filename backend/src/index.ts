@@ -8,6 +8,7 @@ import collectionRoutes from "./routes/collections";
 import listingRoutes from "./routes/listings";
 import merkleRoutes from "./routes/merkle";
 import { startIndexer } from "./indexer/index";
+import { ensureSchema } from "./db/ensureSchema";
 
 dotenv.config();
 
@@ -45,6 +46,14 @@ async function main() {
   // Start server
   await app.listen({ port: PORT, host: HOST });
   console.log(`\n🚀 RitualPad API running on http://${HOST}:${PORT}`);
+
+  // Auto-initialize database tables
+  try {
+    await ensureSchema();
+    console.log("✅ Database schema ready");
+  } catch (err) {
+    console.error("⚠️  Database schema init failed (API still running):", err);
+  }
 
   // Start indexer in background
   try {
