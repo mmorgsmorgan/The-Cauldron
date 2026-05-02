@@ -189,14 +189,14 @@ export default function ItemPage() {
                 {formatEther(BigInt(listingData.price))} RITUAL
               </div>
               {isOwner ? (
-                <button onClick={() => cancelWrite({ address: MARKETPLACE_ADDRESS, abi: RitualMarketplace_ABI, functionName: "cancelListing", args: [contractAddress, tokenId] })}
+                <button onClick={() => cancelWrite({ address: MARKETPLACE_ADDRESS, abi: RitualMarketplace_ABI, functionName: "cancelListing", args: [contractAddress, tokenId], gas: 100000n })}
                   className="w-full py-3 rounded-xl text-xs font-black tracking-wider"
                   style={{ background: "rgba(255,120,120,0.1)", color: "rgba(255,120,120,0.8)", border: "1px solid rgba(255,120,120,0.15)" }}
                   disabled={cancelPending || cancelConfirming}>
                   {cancelPending || cancelConfirming ? "CANCELLING..." : "CANCEL LISTING"}
                 </button>
               ) : (
-                <button onClick={() => buyWrite({ address: MARKETPLACE_ADDRESS, abi: RitualMarketplace_ABI, functionName: "buy", args: [contractAddress, tokenId], value: BigInt(listingData.price) })}
+                <button onClick={() => buyWrite({ address: MARKETPLACE_ADDRESS, abi: RitualMarketplace_ABI, functionName: "buy", args: [contractAddress, tokenId], value: BigInt(listingData.price), gas: 300000n })}
                   className="btn-primary w-full py-3.5 text-sm font-black"
                   disabled={buyPending || buyConfirming}>
                   {buyPending || buyConfirming ? "BUYING..." : "BUY NOW"}
@@ -223,7 +223,7 @@ export default function ItemPage() {
                     onClick={() => {
                       if (!listPrice || parseFloat(listPrice) <= 0) return;
                       const priceWei = BigInt(Math.floor(parseFloat(listPrice) * 1e18));
-                      listWrite({ address: MARKETPLACE_ADDRESS, abi: RitualMarketplace_ABI, functionName: "list", args: [contractAddress, tokenId, priceWei] });
+                      listWrite({ address: MARKETPLACE_ADDRESS, abi: RitualMarketplace_ABI, functionName: "list", args: [contractAddress, tokenId, priceWei], gas: 200000n });
                     }}
                     className="btn-primary w-full py-3 text-xs font-black"
                     disabled={listPending || listConfirming || !listPrice}>
@@ -237,6 +237,7 @@ export default function ItemPage() {
                     abi: [{ inputs: [{ name: "operator", type: "address" }, { name: "approved", type: "bool" }], name: "setApprovalForAll", outputs: [], stateMutability: "nonpayable", type: "function" }] as const,
                     functionName: "setApprovalForAll",
                     args: [MARKETPLACE_ADDRESS, true],
+                    gas: 100000n,
                   })}
                   className="btn-primary w-full py-3 text-xs font-black"
                   disabled={approvePending || approveConfirming}>

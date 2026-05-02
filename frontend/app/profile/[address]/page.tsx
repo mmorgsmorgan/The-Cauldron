@@ -117,6 +117,7 @@ function MyNFTsTab({ nfts, loading, isOwn }: { nfts: NFTItem[]; loading: boolean
       abi: AIRitualNFT_ABI,
       functionName: "setApprovalForAll",
       args: [MARKETPLACE_ADDRESS, true],
+      gas: 100000n,
     });
   }
 
@@ -127,6 +128,7 @@ function MyNFTsTab({ nfts, loading, isOwn }: { nfts: NFTItem[]; loading: boolean
       abi: RitualMarketplace_ABI,
       functionName: "list",
       args: [selectedNFT.contract as `0x${string}`, BigInt(selectedNFT.tokenId), parseEther(price)],
+      gas: 200000n,
     });
   }
 
@@ -276,6 +278,7 @@ function AuctionTab({ address, isOwn }: { address: string; isOwn: boolean }) {
       abi: RitualMarketplace_ABI,
       functionName: "cancelListing",
       args: [contract, tokenId],
+      gas: 100000n,
     });
   }
 

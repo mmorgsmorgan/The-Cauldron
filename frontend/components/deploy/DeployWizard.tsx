@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseEther, zeroHash, decodeEventLog } from "viem";
+import { isAddress, parseEther, zeroHash, decodeEventLog } from "viem";
 import { FACTORY_ADDRESS, NFTFactory_ABI } from "@/lib/contracts";
 import { generateMerkleRoot } from "@/lib/api";
 import { uploadToPinata, uploadMetadataFolderToPinata, resolveIPFSGateway } from "@/lib/pinata";
@@ -125,7 +125,7 @@ export default function DeployWizard() {
   }
 
   async function handleMerkle() {
-    const addrs = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(a => a.startsWith("0x"));
+    const addrs = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(isAddress);
     if (!addrs.length) return;
     try { const r = await generateMerkleRoot(addrs); setMerkleRoot(r.root as `0x${string}`); } catch {}
   }
@@ -139,7 +139,7 @@ export default function DeployWizard() {
       setCsvFile(file.name);
       // Extract addresses from CSV (first column)
       const lines = text.split("\n").slice(1);
-      const addrs = lines.map(l => l.split(",")[0]?.trim()).filter(a => a?.startsWith("0x"));
+      const addrs = lines.map(l => l.split(",")[0]?.trim()).filter(a => a ? isAddress(a) : false);
       setAllowlistCSV(addrs.join("\n"));
     };
     reader.readAsText(file);
@@ -199,6 +199,7 @@ export default function DeployWizard() {
       args: [name, symbol, finalBaseURI, BigInt(imageMode === "multi" ? multiImages.length : maxSupply), recipient as `0x${string}`,
         BigInt(Math.round(parseFloat(royaltyFee) * 100)),
         phases],
+      gas: 500000n,
     });
   }
 

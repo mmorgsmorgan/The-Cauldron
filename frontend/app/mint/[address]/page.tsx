@@ -91,6 +91,7 @@ export default function MintPage() {
         functionName: "publicMint",
         args: [BigInt(activePhaseIdx), BigInt(quantity)],
         value: totalCost,
+        gas: 200000n,
       });
     } else {
       // Fetch the real Merkle proof from the backend
@@ -98,9 +99,15 @@ export default function MintPage() {
       try {
         const merkleRoot = activePhase.merkleRoot;
         const result = await fetchMerkleProof(merkleRoot, userAddress);
+        if (!result.valid) {
+          alert("Your wallet is not on the allowlist for this phase.");
+          return;
+        }
         proof = result.proof as `0x${string}`[];
       } catch (err) {
         console.error("Failed to fetch Merkle proof:", err);
+        alert("Could not verify allowlist status. Please try again.");
+        return;
       }
       writeContract({
         address: contractAddress,
@@ -108,6 +115,7 @@ export default function MintPage() {
         functionName: "allowlistMint",
         args: [BigInt(activePhaseIdx), BigInt(quantity), proof],
         value: totalCost,
+        gas: 200000n,
       });
     }
   }

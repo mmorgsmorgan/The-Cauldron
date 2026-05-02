@@ -54,6 +54,7 @@ function ListingCard({ listing, baseURI }: { listing: ListingEntry; baseURI: str
       functionName: "buy",
       args: [listing.contract as `0x${string}`, BigInt(listing.token_id)],
       value: BigInt(listing.price),
+      gas: 300000n,
     });
   }
 

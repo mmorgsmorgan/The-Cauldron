@@ -23,6 +23,14 @@ All actions are on-chain via Ritual Chain smart contracts. No off-chain API is r
 
 ---
 
+## ⚠️ Common Agent Mistake
+
+**Do not patch only `frontend/app/create/page.tsx`.**
+
+The app has multiple transaction surfaces. If gas, timestamp, or allowlist fixes are needed, inspect every `writeContract` call across `frontend/app` and `frontend/components`.
+
+---
+
 ## Local Project Layout
 
 ```
@@ -617,3 +625,65 @@ All core operations work directly on-chain without the backend.
 8. **Check phase timing before minting.** Read `getPhase(phaseId)` and compare `startTime`/`endTime` against `Date.now()` to avoid `PhaseNotActive` reverts.
 9. **Check wallet mint limits** via `mintedPerWalletPerPhase(phaseId, walletAddress)` before attempting a mint to avoid `WalletLimitExceeded` reverts.
 10. **Approve the marketplace before listing.** Call `nft.setApprovalForAll(marketplaceAddress, true)` before `marketplace.list()`. Listing without approval will revert with `NotApproved`.
+
+---
+
+## Agent Implementation Checklist
+
+When editing this repo, agents must check **all active transaction paths**, not only `frontend/app/create/page.tsx`.
+
+### Transaction Surfaces
+
+All files containing `writeContract` calls:
+
+| File | Transactions |
+|---|---|
+| `frontend/app/create/page.tsx` | `createCollection` |
+| `frontend/components/deploy/DeployWizard.tsx` | `createCollection` |
+| `frontend/app/mint/[address]/page.tsx` | `publicMint`, `allowlistMint` |
+| `frontend/app/explore/page.tsx` | `marketplace.buy` |
+| `frontend/app/collection/[address]/[tokenId]/page.tsx` | `buy`, `list`, `cancelListing`, `setApprovalForAll` |
+| `frontend/app/profile/[address]/page.tsx` | `cancelListing` |
+
+### Required Transaction Gas
+
+| Function | Gas |
+|---|---|
+| `createCollection` | `500000n` |
+| `publicMint` | `200000n` |
+| `allowlistMint` | `200000n` |
+| `marketplace.buy` | `300000n` |
+| `marketplace.list` | `200000n` |
+| `marketplace.cancelListing` | `100000n` |
+| `setApprovalForAll` | `100000n` |
+| `setMerkleRoot`, `setBaseURI`, `setPhaseTime`, `withdraw` | `100000n` |
+
+### Required Timestamp Rule
+
+- Search for `Date.now() / 1000`
+- Search for `Math.floor(Date.now() / 1000)`
+- Replace second-based phase timestamps with millisecond values
+- Mint phase `startTime` and `endTime` must use `Date.now()` or millisecond math
+
+### Required Allowlist Rule
+
+- Validate allowlist entries with `isAddress` from `viem` or `ethers.isAddress`
+- Do **not** use `address.startsWith("0x")` as validation
+- Never deploy an allowlist phase with `zeroHash` as the Merkle root
+- If a Merkle proof lookup fails or returns `valid: false`, do **not** call `allowlistMint`
+
+### Required Safety Rule
+
+- Treat `0x` + 64 hex characters as a private key, not a wallet address
+- Never print it back
+- Never use it unless it is explicitly placed in a local `.env` file by the user
+
+### Required Verification
+
+- Check chain ID is `1979`
+- Check bytecode exists at:
+  - `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` (Factory)
+  - `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` (Marketplace)
+  - `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` (Implementation)
+- Run build/test commands if `npm`, `npx`, and `cast` are available
+- If they are unavailable, say exactly which commands were blocked
