@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ritualpad-db
+    environment:
+      POSTGRES_USER: ritualpad
+      POSTGRES_PASSWORD: ritualpad
+      POSTGRES_DB: ritualpad
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ritualpad"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ritualpad-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ritualpad:ritualpad@postgres:5432/ritualpad
+      RITUAL_RPC_URL: https://rpc.ritualfoundation.org
+      FACTORY_ADDRESS: "0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f"
+      MARKETPLACE_ADDRESS: "0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B"
+      API_PORT: "3001"
+      API_HOST: "0.0.0.0"
+      IPFS_GATEWAY: "https://ipfs.io/ipfs/"
+      START_BLOCK: "0"
+      POLL_INTERVAL_MS: "3000"
+      BATCH_SIZE: "2000"
+    ports:
+      - "3001:3001"
+
+volumes:
+  pgdata:
