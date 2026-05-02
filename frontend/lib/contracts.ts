@@ -1,5 +1,8 @@
-export const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
-export const MARKETPLACE_ADDRESS = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS as `0x${string}`;
+const DEFAULT_FACTORY = "0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f" as const;
+const DEFAULT_MARKETPLACE = "0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B" as const;
+
+export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || DEFAULT_FACTORY) as `0x${string}`;
+export const MARKETPLACE_ADDRESS = (process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS || DEFAULT_MARKETPLACE) as `0x${string}`;
 
 // ── AIRitualNFT ABI (key functions) ──
 export const AIRitualNFT_ABI = [

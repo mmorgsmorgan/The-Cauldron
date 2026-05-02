@@ -23,6 +23,108 @@ All actions are on-chain via Ritual Chain smart contracts. No off-chain API is r
 
 ---
 
+## Local Project Layout
+
+```
+The-Cauldron/
+├── contracts/          # Solidity contracts (Hardhat + ERC721A)
+│   ├── src/            # AIRitualNFT.sol, NFTFactory.sol, RitualMarketplace.sol
+│   ├── scripts/        # Deploy scripts (deploy-raw.js for Ritual Chain)
+│   └── test/           # Hardhat test suite
+├── frontend/           # Next.js 14 app (App Router)
+│   ├── app/            # Pages: create, mint, explore, collections, profile
+│   ├── components/     # DeployWizard, NFTCard, Navbar
+│   ├── lib/            # contracts.ts, api.ts, chains.ts, pinata.ts
+│   └── hooks/          # useData, useNFTOwnership
+├── backend/            # Fastify API + PostgreSQL indexer
+│   ├── src/routes/     # /collections, /listings, /merkle
+│   ├── src/indexer/    # On-chain event listener
+│   └── src/db/         # Schema, queries, pool
+├── SKILL.md            # This file
+├── docker-compose.yml  # Local dev stack
+└── .gitignore
+```
+
+## Required Setup
+
+```bash
+# Contracts
+cd contracts
+npm ci
+npx hardhat compile
+npx hardhat test
+
+# Frontend
+cd ../frontend
+npm ci
+cp .env.example .env.local   # Edit with your values
+npm run dev                  # http://localhost:3000
+
+# Backend
+cd ../backend
+npm install
+cp .env.example .env         # Edit DATABASE_URL
+npm run build
+npm run start                # http://localhost:3001
+```
+
+## Verification Commands
+
+Use these to confirm the project builds correctly:
+
+```bash
+# Contracts compile and tests pass
+cd contracts && npx hardhat compile && npx hardhat test
+
+# Frontend builds without errors
+cd ../frontend && npm run build
+
+# Backend builds without errors
+cd ../backend && npm run build
+
+# Verify deployed contracts have bytecode on Ritual Chain
+cast code 0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f --rpc-url https://rpc.ritualfoundation.org
+cast code 0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B --rpc-url https://rpc.ritualfoundation.org
+```
+
+## Expected Environment
+
+### Frontend (`frontend/.env.local`)
+
+```env
+NEXT_PUBLIC_RITUAL_RPC=https://rpc.ritualfoundation.org
+NEXT_PUBLIC_CHAIN_ID=1979
+NEXT_PUBLIC_EXPLORER=https://explorer.ritualfoundation.org
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_FACTORY_ADDRESS=0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f
+NEXT_PUBLIC_MARKETPLACE_ADDRESS=0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B
+
+# Pinata IPFS JWT keys (get from https://app.pinata.cloud)
+NEXT_PUBLIC_PINATA_JWT_1=
+NEXT_PUBLIC_PINATA_JWT_2=
+NEXT_PUBLIC_PINATA_JWT_3=
+```
+
+### Backend (`backend/.env`)
+
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5432/ritualpad
+API_PORT=3001
+API_HOST=0.0.0.0
+RPC_URL=https://rpc.ritualfoundation.org
+FACTORY_ADDRESS=0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f
+MARKETPLACE_ADDRESS=0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B
+```
+
+### Contracts (`contracts/.env`)
+
+```env
+PRIVATE_KEY=0x...  # Deployer wallet private key (NEVER commit this)
+RPC_URL=https://rpc.ritualfoundation.org
+```
+
+---
+
 ## Deployed Contracts
 
 | Contract | Address | Role |
@@ -496,3 +598,22 @@ All core operations work directly on-chain without the backend.
 4. **Royalty max is 10%** (1000 basis points). Values above 1000 will revert with `RoyaltyTooHigh`.
 5. **The marketplace is escrow-less.** NFTs stay in the seller's wallet until purchased. The seller must keep their approval active.
 6. **Platform fee** is deducted from the sale price along with royalties. The seller receives the remainder.
+
+---
+
+## Agent Safety Rules
+
+1. **Never use second-based timestamps on Ritual Chain.** Always use `Date.now()` or millisecond values for mint phase `startTime`/`endTime`. Dividing by 1000 will create phases that expired decades ago.
+2. **Use explicit gas limits for every transaction:**
+   - Collection creation: `500000`
+   - Minting: `200000`
+   - Marketplace operations: `300000`
+   - Admin functions (setMerkleRoot, setBaseURI, etc.): `100000`
+3. **Treat `0x` + 64 hex characters as a private key**, not a wallet address. Addresses are 40 hex chars. Never log, print, or expose private keys.
+4. **Never commit private keys.** They must only exist in `.env` files which are excluded by `.gitignore`.
+5. **Validate all allowlist addresses** with `ethers.isAddress()` before generating Merkle trees. Invalid addresses silently produce invalid roots.
+6. **Do not deploy allowlist phases with a zero Merkle root** (`0x0000...0000`). An allowlist phase with no root will reject every mint. Set the root via `setMerkleRoot()` after deployment, or use a public phase instead.
+7. **Always verify deployed contract code** with `eth_getCode` before interacting. If it returns `0x`, the contract doesn't exist at that address.
+8. **Check phase timing before minting.** Read `getPhase(phaseId)` and compare `startTime`/`endTime` against `Date.now()` to avoid `PhaseNotActive` reverts.
+9. **Check wallet mint limits** via `mintedPerWalletPerPhase(phaseId, walletAddress)` before attempting a mint to avoid `WalletLimitExceeded` reverts.
+10. **Approve the marketplace before listing.** Call `nft.setApprovalForAll(marketplaceAddress, true)` before `marketplace.list()`. Listing without approval will revert with `NotApproved`.
