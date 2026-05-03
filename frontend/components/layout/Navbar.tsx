@@ -45,6 +45,7 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-1">
             <NavLink href="/discover">Discover</NavLink>
             <NavLink href="/collections">Collections</NavLink>
+            <NavLink href="/agent">Agent</NavLink>
           </div>
 
           {/* Profile / Connect */}
