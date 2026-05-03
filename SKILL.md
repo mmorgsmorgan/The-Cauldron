@@ -23,7 +23,7 @@ user_invocable: true
 > **RPC:** https://rpc.ritualfoundation.org
 > **Explorer:** https://explorer.ritualfoundation.org
 > **Frontend:** https://the-cauldron.vercel.app *(deployment in progress — use local http://localhost:3000 for now)*
-> **Skill Version:** 5.1 (2026-05-03) · Contract commit: `9d0649a`
+> **Skill Version:** 5.2 (2026-05-03) - Contract commit: `1e59e73`
 
 ---
 
@@ -232,6 +232,35 @@ RPC_URL=https://rpc.ritualfoundation.org
 | **NFTFactory** | `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` | Deploys new NFT collections as EIP-1167 minimal proxy clones |
 | **RitualMarketplace** | `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` | Escrow-less NFT marketplace with ERC-2981 royalty enforcement |
 | **AIRitualNFT (impl)** | `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` | Implementation template for collection clones |
+| **CauldronAgent** | `deploy with scripts/deploy-agent.ts` | Autonomous agent - buy/list/cancel via Sovereign Agent precompile |
+
+### Deploy CauldronAgent (Layer 2)
+
+```bash
+# From the contracts/ directory:
+npx hardhat run scripts/deploy-agent.ts --network ritual
+```
+
+After deployment, fund the agent and configure policy:
+
+```bash
+# Fund the agent with RITUAL (for buying NFTs)
+cast send <AGENT_ADDRESS> --value 0.5ether --rpc-url https://rpc.ritualfoundation.org --private-key $PRIVATE_KEY
+
+# Set to autonomous mode with 0.1 RITUAL spend ceiling
+# agent.setPolicy(1, 100000000000000000, 100000000000000000, true, true, true, 80)
+```
+
+CauldronAgent gas limits:
+
+| Function | Gas |
+|---|---|
+| `deploy` (constructor) | `3000000` |
+| `buy` via agent | `300000` |
+| `list` via agent | `200000` |
+| `cancelListing` via agent | `100000` |
+| `requestDecision` | `500000` |
+| `setPolicy` | `100000` |
 
 ---
 
