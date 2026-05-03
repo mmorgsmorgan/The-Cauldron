@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ interface INFTFactory {
  *   Agent identity: This contract ALWAYS identifies itself as an autonomous agent.
  *   It never conceals its on-chain nature. All actions are fully auditable on-chain.
  */
-contract CauldronAgent is Ownable, ReentrancyGuard {
+contract CauldronAgent is Ownable, ReentrancyGuard, IERC721Receiver {
 
     // ── Ritual System Addresses ──────────────────────────────────────────────
 
@@ -123,12 +124,11 @@ contract CauldronAgent is Ownable, ReentrancyGuard {
         _;
     }
 
-    modifier onlyAutonomousOrOwner() {
-        require(
-            policy.mode == Mode.AUTONOMOUS || msg.sender == owner(),
-            "CauldronAgent: not authorized"
-        );
-        _;
+    /// @notice ERC721Receiver - allows this contract to receive NFTs from buy()
+    function onERC721Received(
+        address, address, uint256, bytes calldata
+    ) external pure override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 
     // ── Constructor ──────────────────────────────────────────────────────────
@@ -225,6 +225,9 @@ contract CauldronAgent is Ownable, ReentrancyGuard {
 
         taskId = keccak256(abi.encodePacked(nftContract, tokenId, block.timestamp, msg.sender));
         pendingTasks[taskId] = true;
+
+        // Store context so the callback can resolve nftContract + tokenId
+        _storeContext(taskId, nftContract, tokenId, currentPrice);
 
         // Submit to Sovereign Agent precompile (Ritual enshrined compute)
         (bool success,) = SOVEREIGN_AGENT.call(
@@ -450,12 +453,12 @@ contract CauldronAgent is Ownable, ReentrancyGuard {
         return string(abi.encodePacked(
             "You are CauldronAgent, an autonomous NFT trading agent on Ritual Chain (chain ID 1979). ",
             "You are a disclosed AI agent - never claim to be human. ",
-            "Your policy: spendCeiling=", _uint2str(policy.spendCeiling / 1e15), "mRITUAL, ",
+            "Your policy: spendCeiling=", _uint2str(policy.spendCeiling / (10**15)), "mRITUAL, ",
             "allowBuy=", policy.allowBuy ? "true" : "false", ", ",
             "allowList=", policy.allowList ? "true" : "false", ", ",
             "allowCancel=", policy.allowCancel ? "true" : "false", ". ",
-            "Agent balance: ", _uint2str(address(this).balance / 1e15), "mRITUAL. ",
-            "Target: collection=", _addr2str(nftContract), " tokenId=", _uint2str(tokenId), " price=", _uint2str(currentPrice / 1e15), "mRITUAL. ",
+            "Agent balance: ", _uint2str(address(this).balance / (10**15)), "mRITUAL. ",
+            "Target: collection=", _addr2str(nftContract), " tokenId=", _uint2str(tokenId), " price=", _uint2str(currentPrice / (10**15)), "mRITUAL. ",
             "Context: ", context, ". ",
             "Respond ONLY with JSON: {\"action\":\"buy|list|cancel|none\",\"confidence\":0-100,\"price\":\"<wei>\",\"reason\":\"<1 sentence>\"}"
         ));
@@ -472,16 +475,13 @@ contract CauldronAgent is Ownable, ReentrancyGuard {
     function _parseResult(
         bytes32 taskId,
         bytes calldata result
-    ) internal pure returns (
+    ) internal view returns (
         ActionType actionType,
         address    nftContract,
         uint256    tokenId,
         uint256    value,
         uint8      confidence
     ) {
-        // Decode the original request context from taskId
-        // In production, store request params indexed by taskId
-        // For MVP: parse action from result string, use stored task context
         string memory r = string(result);
 
         // Detect action type from result string
@@ -492,19 +492,17 @@ contract CauldronAgent is Ownable, ReentrancyGuard {
         } else if (_contains(r, "\"cancel\"")) {
             actionType = ActionType.CANCEL;
         } else {
-            actionType = ActionType.NONE;
             return (ActionType.NONE, address(0), 0, 0, 0);
         }
 
         // Default confidence to 75 if not parseable (MVP)
         confidence = 75;
 
-        // nftContract and tokenId must be stored in task context
-        // For MVP, returned from the stored request - set to 0 here as placeholder
-        // Production: use mapping(bytes32 => RequestContext) taskContext
-        nftContract = address(0);
-        tokenId     = 0;
-        value       = 0;
+        // Resolve nftContract + tokenId from stored task context
+        RequestContext storage ctx = taskContext[taskId];
+        nftContract = ctx.nftContract;
+        tokenId     = ctx.tokenId;
+        value       = ctx.suggestedPrice;
     }
 
     // ── Task Context Storage (production-grade) ───────────────────────────────
