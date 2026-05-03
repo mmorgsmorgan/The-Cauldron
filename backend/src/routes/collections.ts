@@ -19,6 +19,11 @@ export default async function collectionRoutes(app: FastifyInstance) {
     "/collections/:address",
     async (request, reply) => {
       const { address } = request.params;
+
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+        return reply.status(400).send({ error: "Invalid contract address format" });
+      }
+
       const collection = await getCollectionByAddress(address);
       if (!collection) {
         return reply.status(404).send({ error: "Collection not found" });
@@ -35,6 +40,11 @@ export default async function collectionRoutes(app: FastifyInstance) {
     "/collections/:address/tokens",
     async (request, reply) => {
       const { address } = request.params;
+
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+        return reply.status(400).send({ error: "Invalid contract address format" });
+      }
+
       const tokens = await getCollectionTokens(address);
       return { contract: address.toLowerCase(), total: tokens.length, tokens };
     }

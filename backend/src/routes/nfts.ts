@@ -14,8 +14,8 @@ export default async function nftRoutes(app: FastifyInstance) {
     const { address } = request.params;
     const verifiedOnly = request.query.verified === "true";
 
-    if (!address || !address.startsWith("0x")) {
-      return reply.status(400).send({ error: "Invalid address" });
+    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      return reply.status(400).send({ error: "Invalid Ethereum address format" });
     }
 
     const nfts = await getNFTsByOwner(address, verifiedOnly);
