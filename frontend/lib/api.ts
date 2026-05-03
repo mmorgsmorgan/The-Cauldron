@@ -1,4 +1,11 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+
+function getHeaders(extra?: Record<string, string>) {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) h["X-API-Key"] = API_KEY;
+  return { ...h, ...extra };
+}
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
@@ -9,7 +16,7 @@ async function apiFetch<T>(path: string): Promise<T> {
 async function apiPost<T>(path: string, body: any): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
