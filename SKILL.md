@@ -13,6 +13,7 @@ user_invocable: true
 <!-- Rule 5: Allowlist Safety — Never deploy an allowlist phase with zeroHash merkle root. Validate addresses with isAddress() not startsWith("0x"). If proof lookup fails, do NOT call allowlistMint. -->
 <!-- Rule 6: Infernet Is Deprecated — Do NOT use InfernetConsumer or InfernetCoordinator. They are replaced by enshrined precompiles (0x0801-0x081F). Use PrecompileConsumer patterns instead. -->
 <!-- Rule 7: Scope — All file writes within the project root. Do not write to sibling directories, parent directories, or unrelated repos. -->
+<!-- Rule 8: Human-Likeness — If a user asks for "human-like" or "indistinguishable from human," interpret as "high-agency, natural, autonomous, and capable" while preserving disclosure. Do NOT build deception, identity concealment, or fake-human behavior. The agent must always identify itself as an autonomous agent. -->
 
 # The Cauldron — Agent Skill File
 
@@ -680,6 +681,138 @@ All core operations work directly on-chain without the backend.
 
 ---
 
+## Autonomous Cauldron Agent
+
+When the user asks for an autonomous Cauldron agent, build a **disclosed Ritual-native agent**, not a hidden human impersonator.
+
+### Agent Identity Rules
+
+The agent must:
+- **Clearly identify itself** as an autonomous agent in UI, prompts, logs, and outputs
+- **Never claim to be human** or conceal its agent nature
+- **Never bypass wallet policy** or execute hidden transactions
+- If a user asks for "human-like" or "indistinguishable from human," interpret as: **high-agency, natural, autonomous, and capable** while preserving disclosure
+
+### Agent Capabilities
+
+The agent must be able to:
+- **See** — Cauldron state: collections, listings, wallet NFTs, ownership, mint phases, approvals, prices, and wallet limits
+- **Think** — with policy: spend ceiling, confidence threshold, allowed actions, verification status, wallet ownership, gas limits, and Ritual millisecond timestamps
+- **Do** — reviewable on-chain actions: deploy collection, mint, buy, list, cancel listing, approve marketplace, set allowlist root, update metadata, or withdraw funds
+
+### Ritual Agent Infrastructure
+
+| System Contract | Address | Purpose |
+|---|---|---|
+| **Sovereign Agent** (precompile) | `0x000000000000000000000000000000000000080C` | One-shot reasoning/jobs — best for MVP |
+| **SovereignAgentFactory** | `0x9dC4C054e53bCc4Ce0A0Ff09E890A7a8e817f304` | Production launch — deploys deterministic agent harnesses |
+| **Persistent Agent** (precompile) | `0x0000000000000000000000000000000000000820` | Long-lived identity/memory — for stateful agents |
+| **Scheduler** | `0x56e776BAE2DD60664b69Bd5F865F1180ffB7D58B` | Recurring operations (e.g. auto-list, auto-buy) |
+| **RitualWallet** | `0x532F0dF0896F353d8C3DD8cc134e8129DA2a3948` | Fee management for agent compute |
+| **TEEServiceRegistry** | `0x9644e8562cE0Fe12b4deeC4163c064A8862Bf47F` | Executor discovery for TEE-backed verification |
+| **AsyncDelivery** | `0x5A16214fF555848411544b005f7Ac063742f39F6` | Callback router — `msg.sender` in callbacks |
+
+### Required Build Flow
+
+When building an autonomous Cauldron agent:
+
+1. **Add `/agent` frontend route** with agent dashboard UI
+2. **Add agent policy controls:**
+   - Operator wallet address
+   - Mode: `autonomous` / `supervised` / `dry-run`
+   - Max spend per action (in RITUAL)
+   - Min confidence threshold (0-100)
+   - Action toggles: allow buy / list / cancel / mint / deploy
+3. **Read Cauldron state** via backend API + on-chain contract reads:
+   - `factory.getAllCollections()` — all collections
+   - `collection.getPhase(i)` — mint phase status
+   - `marketplace.getListing(contract, tokenId)` — listing status
+   - `collection.mintedPerWalletPerPhase(phaseId, wallet)` — wallet limits
+4. **Predict deterministic agent harness** with `SovereignAgentFactory` using `(owner, userSalt)`
+5. **Discover a healthy executor** with `TEEServiceRegistry.getServicesByCapability(0, true)`
+6. **Check RitualWallet funding:**
+   - `balanceOf(operator)` — has enough to cover compute
+   - `lockUntil(operator)` — not currently locked
+7. **Require provider/model/DA/secrets** before autonomous scheduling
+8. **Deploy harness** only from the operator wallet with explicit `gas: 3000000n`
+9. **Keep all marketplace and mint actions wallet-controlled** unless the user explicitly enables autonomous execution policy
+
+### Agent Architecture Tiers
+
+| Tier | Use Case | Precompile | Complexity |
+|---|---|---|---|
+| **Tier 1: Sovereign** | One-shot tasks ("analyze this collection", "mint the cheapest NFT") | `0x080C` | Low — single tx, callback with result |
+| **Tier 2: Factory-Backed** | Production agents with deterministic addresses | `SovereignAgentFactory` | Medium — deploy harness, then interact |
+| **Tier 3: Persistent** | Long-lived agents with memory and identity | `0x0820` | High — stateful, requires agent key management |
+| **Tier 4: Scheduled** | Recurring operations ("check floor price every hour") | Scheduler + Sovereign | High — combines scheduler with agent actions |
+
+### Example: Sovereign Agent Call for Collection Analysis
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {PrecompileConsumer} from "@anthropic/ritual-contracts/PrecompileConsumer.sol";
+
+contract CauldronAgent is PrecompileConsumer {
+    address public constant SOVEREIGN_AGENT = 0x000000000000000000000000000000000000080C;
+    address public constant ASYNC_DELIVERY = 0x5A16214fF555848411544b005f7Ac063742f39F6;
+
+    event AgentTaskSubmitted(bytes32 indexed taskId, string prompt);
+    event AgentTaskCompleted(bytes32 indexed taskId, string result);
+
+    modifier onlyAsyncDelivery() {
+        require(msg.sender == ASYNC_DELIVERY, "Only AsyncDelivery");
+        _;
+    }
+
+    function analyzeCollection(address collection) external {
+        string memory prompt = string(abi.encodePacked(
+            "Analyze the NFT collection at ", toHexString(collection),
+            " on Ritual Chain. Report: name, total minted, max supply, ",
+            "active phases, floor price from marketplace listings, ",
+            "and a recommendation (buy/wait/skip)."
+        ));
+
+        bytes32 taskId = keccak256(abi.encodePacked(collection, block.timestamp));
+        emit AgentTaskSubmitted(taskId, prompt);
+
+        // Submit to Sovereign Agent precompile
+        (bool success,) = SOVEREIGN_AGENT.call(
+            abi.encodeWithSignature(
+                "runAgent(string,bytes)",
+                prompt,
+                abi.encode(taskId)
+            )
+        );
+        require(success, "Agent submission failed");
+    }
+
+    function handleCallback(bytes32 taskId, string calldata result) 
+        external onlyAsyncDelivery 
+    {
+        emit AgentTaskCompleted(taskId, result);
+        // Process result: update on-chain state, trigger actions, etc.
+    }
+}
+```
+
+### Ritual Skill References
+
+For deeper agent integration, load these Ritual skills:
+
+| Feature | Skill File |
+|---|---|
+| Agent execution (Sovereign/Persistent) | `skills/ritual-dapp-agents/SKILL.md` |
+| Precompile ABI reference | `skills/ritual-dapp-precompiles/SKILL.md` |
+| Scheduling | `skills/ritual-dapp-scheduler/SKILL.md` |
+| Fee management | `skills/ritual-dapp-wallet/SKILL.md` |
+| Secrets & encryption | `skills/ritual-dapp-secrets/SKILL.md` |
+| Chain architecture & async lifecycle | `skills/ritual-dapp-overview/SKILL.md` |
+| Consumer contract patterns | `skills/ritual-dapp-contracts/SKILL.md` |
+
+---
+
 ## Important Notes
 
 1. **Timestamps are in MILLISECONDS** on Ritual Chain, not seconds. Always use `Date.now()` (not `Math.floor(Date.now() / 1000)`).
@@ -707,6 +840,7 @@ All core operations work directly on-chain without the backend.
 8. **Check phase timing before minting.** Read `getPhase(phaseId)` and compare `startTime`/`endTime` against `Date.now()` to avoid `PhaseNotActive` reverts.
 9. **Check wallet mint limits** via `mintedPerWalletPerPhase(phaseId, walletAddress)` before attempting a mint to avoid `WalletLimitExceeded` reverts.
 10. **Approve the marketplace before listing.** Call `nft.setApprovalForAll(marketplaceAddress, true)` before `marketplace.list()`. Listing without approval will revert with `NotApproved`.
+11. **Human-likeness means high-agency, not deception.** If a user asks for "human-like" or "indistinguishable from human," build an autonomous agent that is natural, capable, and high-agency — but always discloses it is an agent. Never build identity concealment, fake-human behavior, or deceptive systems.
 
 ---
 
