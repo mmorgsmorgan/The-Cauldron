@@ -31,7 +31,7 @@ export default function CreatePage() {
 
   async function handleGenerateMerkle() {
     if (!allowlistCSV.trim()) return;
-    const addresses = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(isAddress);
+    const addresses = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(a => isAddress(a));
     if (addresses.length === 0) return alert("No valid addresses");
     try {
       const result = await generateMerkleRoot(addresses);

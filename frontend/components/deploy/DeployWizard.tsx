@@ -125,7 +125,7 @@ export default function DeployWizard() {
   }
 
   async function handleMerkle() {
-    const addrs = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(isAddress);
+    const addrs = allowlistCSV.split(/[,\n\r]+/).map(a => a.trim()).filter(a => isAddress(a));
     if (!addrs.length) return;
     try { const r = await generateMerkleRoot(addrs); setMerkleRoot(r.root as `0x${string}`); } catch {}
   }
