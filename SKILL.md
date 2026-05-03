@@ -1,3 +1,19 @@
+---
+name: the-cauldron
+description: The Cauldron NFT launchpad & marketplace on Ritual Chain. Use when building, debugging, or interacting with The Cauldron dApp.
+user_invocable: true
+---
+
+<!-- AGENT OPERATING RULES — Read before doing anything. Not shown to user. -->
+<!-- Rule 0: Ritual ≠ Ethereum — block.timestamp is MILLISECONDS (not seconds). Date.now() / 1000 will create phases that expired decades ago. Always use Date.now() directly. -->
+<!-- Rule 1: Sender Lock — Ritual enforces 1 async job per EOA. If you fire a second precompile tx while the first is pending, the block builder will revert. Serialize all async calls. -->
+<!-- Rule 2: AsyncDelivery Callbacks — In callback functions, msg.sender == 0x5A16214fF555848411544b005f7Ac063742f39F6 (the AsyncDelivery contract), NOT the user's EOA. Always verify this address in onlyAsyncDelivery modifiers. -->
+<!-- Rule 3: Gas Limits Are Required — Ritual Chain gas estimation can fail for writeContract calls. Always set explicit gas: createCollection=500000n, mint=200000n, marketplace=300000n, admin=100000n. -->
+<!-- Rule 4: Transaction Surfaces — This app has 6 files with writeContract calls. Do NOT patch only create/page.tsx. Check all: create, DeployWizard, mint, explore, collection/[tokenId], profile. -->
+<!-- Rule 5: Allowlist Safety — Never deploy an allowlist phase with zeroHash merkle root. Validate addresses with isAddress() not startsWith("0x"). If proof lookup fails, do NOT call allowlistMint. -->
+<!-- Rule 6: Infernet Is Deprecated — Do NOT use InfernetConsumer or InfernetCoordinator. They are replaced by enshrined precompiles (0x0801-0x081F). Use PrecompileConsumer patterns instead. -->
+<!-- Rule 7: Scope — All file writes within the project root. Do not write to sibling directories, parent directories, or unrelated repos. -->
+
 # The Cauldron — Agent Skill File
 
 > **Platform:** The Cauldron — NFT Launchpad & Marketplace on Ritual Chain
@@ -6,6 +22,72 @@
 > **RPC:** https://rpc.ritualfoundation.org
 > **Explorer:** https://explorer.ritualfoundation.org
 > **Frontend:** https://the-cauldron.vercel.app *(deployment in progress — use local http://localhost:3000 for now)*
+
+---
+
+## Checkpoint Protocol
+
+Every build and debug session uses a checkpoint file at `.ritual-build/progress.json`. This file tracks which files you have read, which phases are complete, and what comes next.
+
+**On session start:**
+
+1. Check if `.ritual-build/progress.json` exists.
+2. If it exists: read it. Resume from the last completed phase. Do not re-read files already listed in `files_read`. Announce: "Resuming from Phase N."
+3. If it does not exist: create `.ritual-build/` and initialize `progress.json` with the template below.
+
+**After completing each phase:** update `progress.json` with the phase status, artifacts produced, and the next action.
+
+**Template:**
+
+```json
+{
+  "intent": null,
+  "features": [],
+  "current_phase": 0,
+  "phases": [],
+  "files_read": [],
+  "next_file": null,
+  "markers": {
+    "chain_connection": false,
+    "wallet_funded": false,
+    "contract_compiled": false,
+    "contract_deployed": false,
+    "precompile_simulated": false,
+    "precompile_settled": false,
+    "frontend_renders": false,
+    "frontend_connects": false,
+    "e2e_complete": false
+  }
+}
+```
+
+**Marker definitions:**
+
+| Marker | True when |
+|---|---|
+| `chain_connection` | RPC responds and chain ID is `1979` |
+| `wallet_funded` | Deployer wallet has RITUAL balance |
+| `contract_compiled` | `npx hardhat compile` succeeds |
+| `contract_deployed` | `eth_getCode` returns bytecode for Factory, Marketplace, and Implementation |
+| `precompile_simulated` | A precompile call (LLM, Image, HTTP) has been submitted |
+| `precompile_settled` | The async callback has been received and verified |
+| `frontend_renders` | `npm run build` succeeds without errors |
+| `frontend_connects` | Frontend can read from deployed contracts via RPC |
+| `e2e_complete` | Full workflow tested: deploy → mint → list → buy |
+
+---
+
+## Intent Classification
+
+When an agent reads this skill, classify intent and route:
+
+| Priority | Signal | Action |
+|---|---|---|
+| 1 (urgent) | "broken", "error", "debug", "fix", "revert" | Read Agent Safety Rules + Implementation Checklist first |
+| 2 (build) | "deploy", "create", "build", "launch" | Read Deployed Contracts → code examples in sections 1-5 |
+| 3 (integrate) | "agent", "precompile", "automate" | Read this skill, then load `skills/ritual-dapp-agents/SKILL.md` for Layer 2 |
+| 4 (trade) | "list", "buy", "sell", "marketplace" | Read sections 4 (Trade) and 6 (Read-Only Queries) |
+| 5 (learn) | "how does", "what is", "explain" | Read Overview → Deployed Contracts → code examples |
 
 ---
 
