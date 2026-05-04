@@ -19,9 +19,9 @@ import argparse
 import http.server
 import json
 import os
+import re
 import sys
 import urllib.request
-from string import Template
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -58,25 +58,32 @@ def parse_skill(skill_text):
         "factory":    FACTORY,
         "intents":    ["buy", "list", "cancel", "monitor", "deploy"],
     }
-    # Extract version if present
     for line in skill_text.splitlines():
         if "Skill Version" in line:
             parts = line.split(":")
             if len(parts) > 1:
                 info["version"] = parts[1].strip().split()[0]
-            break
+        # Extract contract addresses from SKILL.md table
+        if "RitualMarketplace" in line and "0x" in line:
+            m = re.search(r"(0x[0-9a-fA-F]{40})", line)
+            if m:
+                info["marketplace"] = m.group(1)
+        if "NFTFactory" in line and "0x" in line:
+            m = re.search(r"(0x[0-9a-fA-F]{40})", line)
+            if m:
+                info["factory"] = m.group(1)
     return info
 
 # ── Generate HTML UI ──────────────────────────────────────────────────────────
 
 def generate_html(agent_address, skill_info):
     """Generate a self-contained HTML dashboard for this agent instance."""
-    return Template("""<!DOCTYPE html>
+    html = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CauldronAgent — $agent_short</title>
+  <title>CauldronAgent - {{AGENT_SHORT}}</title>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
   <style>
     :root {
@@ -133,9 +140,9 @@ def generate_html(agent_address, skill_info):
       <span id="mode-badge" class="badge badge-sup">SUPERVISED</span>
     </div>
     <p class="sub">
-      Agent: <code>$agent_address</code> &bull;
-      Skill v$skill_version &bull;
-      Ritual Chain ($chain_id) &bull;
+      Agent: <code>{{AGENT}}</code> &bull;
+      Skill v{{VERSION}} &bull;
+      Ritual Chain ({{CHAIN_ID}}) &bull;
       <span id="wallet-addr">Not connected</span>
     </p>
 
@@ -219,10 +226,10 @@ def generate_html(agent_address, skill_info):
   <div id="status-bar"></div>
 
 <script>
-const AGENT   = "$agent_address";
-const MARKET  = "$marketplace";
-const RPC     = "$rpc_url";
-const CHAIN   = $chain_id;
+const AGENT   = "{{AGENT}}";
+const MARKET  = "{{MARKETPLACE}}";
+const RPC     = "{{RPC}}";
+const CHAIN   = {{CHAIN_ID}};
 
 const AGENT_ABI = [
   "function getAgentInfo() view returns (string,uint8,uint256,bool,bool,bool,uint8,uint256,uint256,uint256)",
@@ -388,14 +395,14 @@ log("Agent UI loaded. Connect your wallet to begin.", "inf");
 log("Agent contract: " + AGENT, "inf");
 </script>
 </body>
-</html>""").substitute(
-        agent_address=agent_address,
-        agent_short=agent_address[:10] + "..." if agent_address else "unset",
-        skill_version=skill_info["version"],
-        chain_id=skill_info["chain_id"],
-        rpc_url=skill_info["rpc"],
-        marketplace=skill_info["marketplace"],
-    )
+</html>"""
+    html = html.replace("{{AGENT}}", agent_address)
+    html = html.replace("{{AGENT_SHORT}}", agent_address[:10] + "..." if agent_address else "unset")
+    html = html.replace("{{VERSION}}", skill_info["version"])
+    html = html.replace("{{CHAIN_ID}}", str(skill_info["chain_id"]))
+    html = html.replace("{{RPC}}", skill_info["rpc"])
+    html = html.replace("{{MARKETPLACE}}", skill_info["marketplace"])
+    return html
 
 # ── HTTP Server ───────────────────────────────────────────────────────────────
 
@@ -406,13 +413,21 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
         if self.path == "/" or self.path == "/index.html":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(AgentHandler.html.encode("utf-8"))
         elif self.path == "/health":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(b'{"status":"ok","agent":"CauldronAgent"}')
+        elif self.path == "/api/info":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(AgentHandler.info).encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()
@@ -440,7 +455,9 @@ def main():
 
     skill_text         = read_skill(args.skill)
     skill_info         = parse_skill(skill_text)
+    skill_info["agent_address"] = args.address
     AgentHandler.html  = generate_html(args.address, skill_info)
+    AgentHandler.info  = skill_info
 
     print(f"[agent] Skill v{skill_info['version']} loaded.")
     print(f"[agent] Chain: {skill_info['chain']} (ID {skill_info['chain_id']})")
