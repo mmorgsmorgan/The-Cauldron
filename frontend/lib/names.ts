@@ -5,7 +5,7 @@
  * Provides O(1) lookup, automatic refresh every 6 hours, and graceful fallback.
  */
 
-const NAMES_API = "https://ritual-names.vercel.app/api/names";
+const NAMES_API = "/api/names"; // proxied via Next.js API route to avoid CORS
 const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const LIGHT_REFRESH_MS = 5 * 60 * 1000;           // 5 minutes
 const STORAGE_KEY = "ritual_names_cache";
