@@ -232,30 +232,36 @@ RPC_URL=https://rpc.ritualfoundation.org
 | **NFTFactory** | `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` | Deploys new NFT collections as EIP-1167 minimal proxy clones |
 | **RitualMarketplace** | `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` | Escrow-less NFT marketplace with ERC-2981 royalty enforcement |
 | **AIRitualNFT (impl)** | `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` | Implementation template for collection clones |
-| **CauldronAgent** | `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f` | Autonomous agent - buy/list/cancel via Sovereign Agent precompile |
+| **CauldronAgent** | `user-deployed` (ref: `0xCb9d...D28f`) | User-owned autonomous agent — each user deploys their own |
 
-### CauldronAgent — Deployed ✅
+### CauldronAgent — User-Owned Agent Infrastructure
 
-**Address:** `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f`  
-**Explorer:** https://explorer.ritualfoundation.org/address/0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f  
-**Deployed:** May 2026 | **Mode:** SUPERVISED | **Spend ceiling:** 0.1 RITUAL
+The Cauldron provides infrastructure for **user-owned autonomous agents**. Each user deploys their own `CauldronAgent.sol` contract, controls their own policy, and runs their own local dashboard. No central server manages your agent.
 
-### Run the Agent Locally (Python — no Node.js required)
+**Reference deployment:** `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f` ([explorer](https://explorer.ritualfoundation.org/address/0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f))
 
-The agent runs its own self-hosted frontend. Each agent reads SKILL.md, generates a tailored dashboard, and serves it via Python's built-in HTTP server.
+### Step 1: Deploy Your Agent
 
 ```bash
-# From the repo root — no install required, Python stdlib only
-python3 agent/agent.py
-
-# Override address or port
-python3 agent/agent.py --address 0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f --port 8888
-
-# Use local SKILL.md instead of GitHub
-python3 agent/agent.py --skill ./SKILL.md
+cd contracts
+echo "DEPLOYER_PRIVATE_KEY=0xYourKey" > .env
+npx hardhat run scripts/deploy-agent.ts --network ritual
+# → outputs your agent address
 ```
 
-Then open **http://localhost:8888** and connect MetaMask.
+### Step 2: Run Your Agent Locally (Python — no Node.js)
+
+```bash
+python3 agent/agent.py --address 0xYourDeployedAgent
+
+# Custom port
+python3 agent/agent.py --address 0xYourDeployedAgent --port 9000
+
+# Use local SKILL.md
+python3 agent/agent.py --address 0xYourDeployedAgent --skill ./SKILL.md
+```
+
+Then open **http://localhost:8888** → connect MetaMask → your agent is live.
 
 **Agent server endpoints:**
 
@@ -265,13 +271,13 @@ Then open **http://localhost:8888** and connect MetaMask.
 | `GET /health` | `{"status":"ok","agent":"CauldronAgent"}` |
 | `GET /api/info` | Skill config, chain, contracts (JSON) |
 
-### Fund the Agent
+### Step 3: Fund Your Agent
 
 ```bash
-cast send 0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f \
+cast send <YOUR_AGENT_ADDRESS> \
   --value 0.05ether \
   --rpc-url https://rpc.ritualfoundation.org \
-  --private-key $DEPLOYER_PRIVATE_KEY
+  --private-key $YOUR_PRIVATE_KEY
 ```
 
 ### CauldronAgent Gas Limits

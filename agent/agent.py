@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-CauldronAgent Local Server
---------------------------
-A lightweight Python HTTP server that reads SKILL.md, generates a
-self-contained agent dashboard, and serves it locally.
+CauldronAgent — User-Owned Agent Infrastructure
+------------------------------------------------
+This is infrastructure for running YOUR OWN autonomous NFT agent.
+Each user deploys their own CauldronAgent contract, then runs this
+server to get a local dashboard for managing it.
 
 No Node.js required. No build step. Python stdlib only.
 
 Usage:
-    python3 agent.py --address 0xYourAgentAddress
-    python3 agent.py --address 0xYourAgentAddress --port 8888
-    python3 agent.py --address 0xYourAgentAddress --skill ./SKILL.md
+    python3 agent.py --address 0xYourDeployedAgent
+    python3 agent.py --address 0xYourDeployedAgent --port 9000
+    python3 agent.py --address 0xYourDeployedAgent --skill ../SKILL.md
 
 Then open: http://localhost:8888
 """
@@ -26,7 +27,6 @@ import urllib.request
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
 SKILL_URL      = "https://raw.githubusercontent.com/mmorgsmorgan/The-Cauldron/main/SKILL.md"
-AGENT_ADDRESS  = "0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f"   # deployed May 2026
 MARKETPLACE    = "0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B"
 FACTORY        = "0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f"
 CHAIN_ID       = 1979
@@ -441,14 +441,14 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="CauldronAgent Local UI Server")
-    parser.add_argument("--address", required=False, default=AGENT_ADDRESS,
+    parser.add_argument("--address", required=True,
                         help="Deployed CauldronAgent contract address (0x...)")
     parser.add_argument("--port",    type=int, default=8888, help="Port to serve on (default: 8888)")
     parser.add_argument("--skill",   default=None,           help="Path to local SKILL.md (optional)")
     args = parser.parse_args()
 
-    print("=" * 52)
-    print("  CauldronAgent Local Server")
+    print("="  * 52)
+    print("  CauldronAgent — Your Agent Dashboard")
     print("=" * 52)
     print(f"  Agent:  {args.address}")
     print(f"  Port:   {args.port}")
