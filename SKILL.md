@@ -14,6 +14,9 @@ user_invocable: true
 <!-- Rule 6: Infernet Is Deprecated — Do NOT use InfernetConsumer or InfernetCoordinator. They are replaced by enshrined precompiles (0x0801-0x081F). Use PrecompileConsumer patterns instead. -->
 <!-- Rule 7: Scope — All file writes within the project root. Do not write to sibling directories, parent directories, or unrelated repos. -->
 <!-- Rule 8: Human-Likeness — If a user asks for "human-like" or "indistinguishable from human," interpret as "high-agency, natural, autonomous, and capable" while preserving disclosure. Do NOT build deception, identity concealment, or fake-human behavior. The agent must always identify itself as an autonomous agent. -->
+<!-- Rule 9: Fresh Checkout — Always `git pull origin main` before reading file paths. Agent infrastructure files (agent/agent.py, contracts/scripts/deploy-agent.ts) were added after the initial commit. If a file is missing, your checkout is stale. -->
+<!-- Rule 10: Signer Boundary — Agents CANNOT sign on-chain transactions. Deployment and funding require the USER's wallet signature via MetaMask or CLI. The agent's role is to prepare, guide, and verify — not to sign. Report what you verified and what requires user action. -->
+<!-- Rule 11: Minimum Balance — Deploying CauldronAgent requires ~0.006 RITUAL for gas (5M gas × 1 gwei). Funding the agent for trading requires additional RITUAL. If the wallet balance is below 0.01 RITUAL, warn the user before attempting deployment. -->
 
 # The Cauldron — Agent Skill File
 
@@ -23,7 +26,42 @@ user_invocable: true
 > **RPC:** https://rpc.ritualfoundation.org
 > **Explorer:** https://explorer.ritualfoundation.org
 > **Frontend:** https://the-cauldron.vercel.app *(deployment in progress — use local http://localhost:3000 for now)*
-> **Skill Version:** 5.2 (2026-05-03) - Contract commit: `1e59e73`
+> **Skill Version:** 5.3 (2026-05-06) - Contract commit: `2667a6c`
+> **Agent Infra:** `agent/agent.py` (Python stdlib) + `contracts/src/CauldronAgent.sol`
+
+---
+
+## Agent Activation Prerequisites
+
+**Before doing anything, run:**
+
+```bash
+git pull origin main
+```
+
+Agent infrastructure was added in recent commits. If `agent/agent.py` or `contracts/scripts/deploy-agent.ts` are missing, your checkout is stale.
+
+**What agents CAN do:**
+- Read SKILL.md and understand capabilities
+- Verify RPC connectivity, wallet balances, contract state
+- Prepare deployment commands and configuration
+- Run `agent/agent.py` locally (Python 3 stdlib, no install needed)
+- Guide users through the activation flow
+
+**What agents CANNOT do (requires user wallet signature):**
+- Deploy contracts (`deploy-agent.ts` requires `DEPLOYER_PRIVATE_KEY`)
+- Fund the agent contract (requires sending RITUAL)
+- Execute on-chain transactions (setPolicy, requestDecision, directBuy)
+
+**Minimum requirements:**
+- Python 3.6+ (for `agent/agent.py`)
+- Wallet with ≥ 0.01 RITUAL (deployment costs ~0.006 RITUAL)
+- MetaMask or CLI signer connected to Ritual Chain (ID 1979)
+
+**Activation path (3 steps):**
+1. **User** deploys: `npx hardhat run scripts/deploy-agent.ts --network ritual`
+2. **User** runs: `python3 agent/agent.py --address 0xTheirAgent`
+3. **User** connects MetaMask at `http://localhost:8888` → agent takes over
 
 ---
 
