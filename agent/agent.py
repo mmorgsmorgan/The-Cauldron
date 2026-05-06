@@ -405,10 +405,90 @@ log("Agent contract: " + AGENT, "inf");
     html = html.replace("{{MARKETPLACE}}", skill_info["marketplace"])
     return html
 
+# ── Deploy UI Generator ───────────────────────────────────────────────────────
+
+def generate_deploy_html(skill_info):
+    """Generate a browser-based deploy page using MetaMask + ethers.js."""
+    html = """<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Deploy Your CauldronAgent</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <style>
+    :root{--mint:#c8f7c5;--bg:#040f0a;--card:#0a2e1f;--border:rgba(200,247,197,0.1);--muted:rgba(200,247,197,0.45)}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:var(--bg);color:var(--mint);font-family:system-ui,sans-serif;min-height:100vh;padding:2rem}
+    .wrap{max-width:640px;margin:0 auto}
+    h1{font-size:2rem;font-weight:900;margin-bottom:.5rem;text-align:center}
+    .sub{color:var(--muted);text-align:center;margin-bottom:2rem;font-size:.9rem}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:1rem;padding:1.5rem;margin-bottom:1.25rem}
+    .card h2{font-size:1rem;font-weight:800;margin-bottom:.75rem}
+    .card label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:.25rem}
+    .card .val{font-size:.9rem;font-weight:700;word-break:break-all}
+    button{padding:.85rem 1.5rem;background:var(--mint);color:#040f0a;border:none;border-radius:.75rem;font-weight:800;font-size:.95rem;cursor:pointer;width:100%;transition:all .2s}
+    button:hover{background:#ddfbdb;transform:translateY(-1px)}
+    button:disabled{opacity:.4;cursor:not-allowed;transform:none}
+    .log{font-family:monospace;font-size:.78rem;color:var(--muted);max-height:250px;overflow-y:auto;margin-top:1rem;background:rgba(0,0,0,.3);padding:1rem;border-radius:.5rem}
+    .log .ok{color:rgba(100,255,150,.8)}.log .err{color:rgba(255,120,120,.8)}.log .inf{color:rgba(200,247,197,.5)}
+    .done{background:rgba(100,255,150,.08);border:1px solid rgba(100,255,150,.2);border-radius:1rem;padding:1.5rem;text-align:center;margin-bottom:1.25rem;display:none}
+    .done h2{color:rgba(100,255,150,.9);font-size:1.2rem;margin-bottom:.5rem}
+    .done code{font-size:.85rem;word-break:break-all}
+  </style>
+</head><body>
+<div class="wrap">
+  <h1>Deploy Your CauldronAgent</h1>
+  <p class="sub">Connect MetaMask, deploy your own agent, then manage it locally.</p>
+  <div class="card"><h2>Step 1: Connect Wallet</h2>
+    <button id="btn-connect" onclick="connect()">Connect MetaMask</button>
+    <div style="margin-top:.75rem"><label>Wallet</label><div class="val" id="wallet">--</div>
+    <label style="margin-top:.5rem">Balance</label><div class="val" id="balance">--</div></div></div>
+  <div class="card"><h2>Step 2: Deploy</h2>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Gas: ~5M x 1 gwei = ~0.005 RITUAL</p>
+    <button id="btn-deploy" onclick="deploy()" disabled>Deploy CauldronAgent</button></div>
+  <div class="done" id="done-box"><h2>Agent Deployed!</h2>
+    <p>Address:</p><code id="deployed-addr"></code>
+    <p style="margin-top:1rem;font-size:.85rem">Now run:<br/><code>python3 agent.py --address <span id="cmd-addr"></span></code></p></div>
+  <div class="card"><h2>Log</h2><div class="log" id="log"></div></div>
+</div>
+<script>
+const CHAIN={{CHAIN_ID}},RPC="{{RPC}}",MARKET="{{MARKETPLACE}}",FACTORY="0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f";
+const CEILING=ethers.parseEther("0.1");
+let provider,signer;
+function log(m,t="inf"){const d=document.getElementById("log"),e=document.createElement("div");e.className=t;e.textContent="["+new Date().toLocaleTimeString()+"] "+m;d.prepend(e)}
+async function connect(){
+  if(!window.ethereum){log("MetaMask not found","err");return}
+  try{provider=new ethers.BrowserProvider(window.ethereum);await provider.send("eth_requestAccounts",[]);
+  try{await provider.send("wallet_switchEthereumChain",[{chainId:"0x"+CHAIN.toString(16)}])}catch(e){if(e.code===4902){await provider.send("wallet_addEthereumChain",[{chainId:"0x"+CHAIN.toString(16),chainName:"Ritual Chain",nativeCurrency:{name:"RITUAL",symbol:"RITUAL",decimals:18},rpcUrls:[RPC],blockExplorerUrls:["https://explorer.ritualfoundation.org"]}])}}
+  signer=await provider.getSigner();const addr=await signer.getAddress();const bal=await provider.getBalance(addr);
+  document.getElementById("wallet").textContent=addr;document.getElementById("balance").textContent=ethers.formatEther(bal)+" RITUAL";
+  document.getElementById("btn-connect").textContent="Connected";document.getElementById("btn-connect").disabled=true;document.getElementById("btn-deploy").disabled=false;
+  log("Connected: "+addr,"ok");if(bal<ethers.parseEther("0.01"))log("WARNING: balance below 0.01 RITUAL","err");
+  }catch(e){log("Failed: "+e.message,"err")}}
+async function deploy(){
+  if(!signer){log("Connect first","err");return}
+  document.getElementById("btn-deploy").disabled=true;document.getElementById("btn-deploy").textContent="Deploying...";
+  try{log("Fetching artifact...","inf");const res=await fetch("/artifact");if(!res.ok)throw new Error("CauldronAgent.json not found");
+  const art=await res.json();log("Sending deploy tx...","inf");
+  const f=new ethers.ContractFactory(art.abi,art.bytecode,signer);
+  const tx=await f.deploy(MARKET,FACTORY,CEILING,{gasLimit:5000000n,gasPrice:1000000007n,type:0});
+  log("Tx: "+tx.deploymentTransaction().hash,"inf");log("Waiting...","inf");await tx.waitForDeployment();
+  const addr=await tx.getAddress();log("Deployed: "+addr,"ok");
+  document.getElementById("deployed-addr").textContent=addr;document.getElementById("cmd-addr").textContent=addr;
+  document.getElementById("done-box").style.display="block";document.getElementById("btn-deploy").textContent="Deployed";
+  }catch(e){log("Failed: "+e.message,"err");document.getElementById("btn-deploy").disabled=false;document.getElementById("btn-deploy").textContent="Retry"}}
+log("Ready. Connect MetaMask to begin.","inf");
+</script></body></html>"""
+    html = html.replace("{{CHAIN_ID}}", str(skill_info["chain_id"]))
+    html = html.replace("{{RPC}}", skill_info["rpc"])
+    html = html.replace("{{MARKETPLACE}}", skill_info["marketplace"])
+    return html
+
 # ── HTTP Server ───────────────────────────────────────────────────────────────
 
 class AgentHandler(http.server.BaseHTTPRequestHandler):
     html = ""
+    info = {}
+    artifact_json = None
 
     def do_GET(self):
         if self.path == "/" or self.path == "/index.html":
@@ -429,6 +509,12 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(AgentHandler.info).encode("utf-8"))
+        elif self.path == "/artifact" and AgentHandler.artifact_json:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(AgentHandler.artifact_json.encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()
@@ -437,34 +523,68 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[http] {args[0]} {args[1]}")
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def load_artifact():
+    """Load CauldronAgent.json from agent/ dir or contracts/ artifacts."""
+    paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "CauldronAgent.json"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "contracts",
+                     "artifacts", "src", "CauldronAgent.sol", "CauldronAgent.json"),
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            print(f"[agent] Loaded artifact from {p}")
+            with open(p, "r") as f:
+                data = json.load(f)
+                return json.dumps({"abi": data["abi"], "bytecode": data["bytecode"]})
+    return None
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="CauldronAgent Local UI Server")
-    parser.add_argument("--address", required=True,
+    parser = argparse.ArgumentParser(description="CauldronAgent — User-Owned Agent Infrastructure")
+    parser.add_argument("--address", default=None,
                         help="Deployed CauldronAgent contract address (0x...)")
-    parser.add_argument("--port",    type=int, default=8888, help="Port to serve on (default: 8888)")
-    parser.add_argument("--skill",   default=None,           help="Path to local SKILL.md (optional)")
+    parser.add_argument("--deploy",  action="store_true",
+                        help="Deploy mode — browser UI to deploy via MetaMask")
+    parser.add_argument("--port",    type=int, default=8888, help="Port (default: 8888)")
+    parser.add_argument("--skill",   default=None,           help="Path to local SKILL.md")
     args = parser.parse_args()
 
-    print("="  * 52)
-    print("  CauldronAgent — Your Agent Dashboard")
-    print("=" * 52)
-    print(f"  Agent:  {args.address}")
+    if not args.address and not args.deploy:
+        print("Usage:")
+        print("  Deploy new agent:  python3 agent.py --deploy")
+        print("  Manage existing:   python3 agent.py --address 0xYourAgent")
+        sys.exit(1)
+
+    skill_text = read_skill(args.skill)
+    skill_info = parse_skill(skill_text)
+    AgentHandler.artifact_json = load_artifact()
+
+    if args.deploy:
+        print("=" * 52)
+        print("  CauldronAgent — Deploy Mode")
+        print("=" * 52)
+        if not AgentHandler.artifact_json:
+            print("\n  ERROR: CauldronAgent.json not found!")
+            print("  Place it in the agent/ directory.")
+            sys.exit(1)
+        AgentHandler.html = generate_deploy_html(skill_info)
+        AgentHandler.info = {"mode": "deploy", **skill_info}
+    else:
+        print("=" * 52)
+        print("  CauldronAgent — Your Agent Dashboard")
+        print("=" * 52)
+        print(f"  Agent:  {args.address}")
+        skill_info["agent_address"] = args.address
+        AgentHandler.html = generate_html(args.address, skill_info)
+        AgentHandler.info = skill_info
+
     print(f"  Port:   {args.port}")
-    print()
-
-    skill_text         = read_skill(args.skill)
-    skill_info         = parse_skill(skill_text)
-    skill_info["agent_address"] = args.address
-    AgentHandler.html  = generate_html(args.address, skill_info)
-    AgentHandler.info  = skill_info
-
-    print(f"[agent] Skill v{skill_info['version']} loaded.")
-    print(f"[agent] Chain: {skill_info['chain']} (ID {skill_info['chain_id']})")
+    print(f"\n[agent] Skill v{skill_info['version']} loaded.")
     print(f"[agent] Serving at http://localhost:{args.port}")
-    print(f"[agent] Press Ctrl+C to stop.")
-    print()
+    print(f"[agent] Press Ctrl+C to stop.\n")
 
     server = http.server.HTTPServer(("", args.port), AgentHandler)
     try:
@@ -475,3 +595,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
