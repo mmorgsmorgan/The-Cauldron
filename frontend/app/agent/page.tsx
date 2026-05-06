@@ -31,17 +31,19 @@ export default function AgentPage() {
       <div className="glass-card p-8 text-left mb-6">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-2xl font-black" style={{ color: "var(--mint)", opacity: 0.3 }}>02</span>
-          <h2 className="font-black text-xl" style={{ color: "var(--mint)" }}>Deploy Your Agent Contract</h2>
+          <h2 className="font-black text-xl" style={{ color: "var(--mint)" }}>Create a Hot Wallet</h2>
         </div>
         <p className="text-sm mb-4" style={{ color: "rgba(200,247,197,0.5)" }}>
-          Run the deploy server locally. Connect MetaMask in your browser and deploy your
-          own CauldronAgent contract. You own it. You control the policy.
+          Create a dedicated wallet for your agent. Never use your main wallet.
+          This wallet will own the agent contract and sign all transactions.
         </p>
         <div className="p-4 rounded-xl text-sm" style={{ background: "rgba(200,247,197,0.04)", fontFamily: "JetBrains Mono, monospace", lineHeight: 1.8, color: "rgba(200,247,197,0.7)" }}>
-          python3 agent/agent.py --deploy<br/><br/>
-          <span style={{ color: "rgba(200,247,197,0.3)" }}>Open http://localhost:8888</span><br/>
-          <span style={{ color: "rgba(200,247,197,0.3)" }}>Connect MetaMask, click Deploy</span><br/>
-          <span style={{ color: "rgba(200,247,197,0.3)" }}>Note your deployed agent address</span>
+          <span style={{ color: "rgba(200,247,197,0.3)" }}>MetaMask: Create Account, copy private key</span><br/>
+          <span style={{ color: "rgba(200,247,197,0.3)" }}>Fund it with enough for gas + trading:</span><br/><br/>
+          cast send 0xNewHotWallet \<br/>
+          {"  "}--value 0.1ether \<br/>
+          {"  "}--rpc-url https://rpc.ritualfoundation.org \<br/>
+          {"  "}--private-key $YOUR_MAIN_KEY
         </div>
       </div>
 
@@ -49,19 +51,18 @@ export default function AgentPage() {
       <div className="glass-card p-8 text-left mb-6">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-2xl font-black" style={{ color: "var(--mint)", opacity: 0.3 }}>03</span>
-          <h2 className="font-black text-xl" style={{ color: "var(--mint)" }}>Create a Hot Wallet</h2>
+          <h2 className="font-black text-xl" style={{ color: "var(--mint)" }}>Deploy Your Agent Contract</h2>
         </div>
         <p className="text-sm mb-4" style={{ color: "rgba(200,247,197,0.5)" }}>
-          Never give an agent your main wallet key. Create a separate wallet, fund it
-          with only what the agent needs. If compromised, only the small amount is at risk.
+          Connect the hot wallet in MetaMask, then deploy.
+          The hot wallet becomes the contract owner with full execution rights,
+          bounded by the policy you set.
         </p>
         <div className="p-4 rounded-xl text-sm" style={{ background: "rgba(200,247,197,0.04)", fontFamily: "JetBrains Mono, monospace", lineHeight: 1.8, color: "rgba(200,247,197,0.7)" }}>
-          <span style={{ color: "rgba(200,247,197,0.3)" }}>MetaMask: Create Account, copy private key</span><br/>
-          <span style={{ color: "rgba(200,247,197,0.3)" }}>Fund it with a small amount:</span><br/><br/>
-          cast send 0xNewHotWallet \<br/>
-          {"  "}--value 0.05ether \<br/>
-          {"  "}--rpc-url https://rpc.ritualfoundation.org \<br/>
-          {"  "}--private-key $YOUR_MAIN_KEY
+          python3 agent/agent.py --deploy<br/><br/>
+          <span style={{ color: "rgba(200,247,197,0.3)" }}>Open http://localhost:8888</span><br/>
+          <span style={{ color: "rgba(200,247,197,0.3)" }}>Connect hot wallet in MetaMask</span><br/>
+          <span style={{ color: "rgba(200,247,197,0.3)" }}>Click Deploy, note the contract address</span>
         </div>
       </div>
 
@@ -113,8 +114,8 @@ export default function AgentPage() {
             ["You chat", "Tell your agent what to do in natural language"],
             ["Agent reads SKILL.md", "Learns capabilities, contracts, and chain config from the skill file"],
             ["Agent executes", "Calls the local API, signs with hot wallet, sends to Ritual Chain"],
+            ["Contract enforces policy", "Spend ceiling, permissions, and mode are checked on-chain"],
             ["You monitor", "Dashboard shows balance, actions, policy — all on-chain and auditable"],
-            ["You control", "Set spend ceiling, permissions, mode — enforced by the smart contract"],
           ].map(([title, desc]) => (
             <div key={title} className="flex gap-3 items-start">
               <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: "var(--mint)" }} />
