@@ -232,37 +232,61 @@ RPC_URL=https://rpc.ritualfoundation.org
 | **NFTFactory** | `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` | Deploys new NFT collections as EIP-1167 minimal proxy clones |
 | **RitualMarketplace** | `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` | Escrow-less NFT marketplace with ERC-2981 royalty enforcement |
 | **AIRitualNFT (impl)** | `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` | Implementation template for collection clones |
-| **CauldronAgent** | `deploy with scripts/deploy-agent.ts` | Autonomous agent - buy/list/cancel via Sovereign Agent precompile |
+| **CauldronAgent** | `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f` | Autonomous agent - buy/list/cancel via Sovereign Agent precompile |
 
-### Deploy CauldronAgent (Layer 2)
+### CauldronAgent — Deployed ✅
+
+**Address:** `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f`  
+**Explorer:** https://explorer.ritualfoundation.org/address/0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f  
+**Deployed:** May 2026 | **Mode:** SUPERVISED | **Spend ceiling:** 0.1 RITUAL
+
+### Run the Agent Locally (Python — no Node.js required)
+
+The agent runs its own self-hosted frontend. Each agent reads SKILL.md, generates a tailored dashboard, and serves it via Python's built-in HTTP server.
 
 ```bash
-# From the contracts/ directory:
-npx hardhat run scripts/deploy-agent.ts --network ritual
+# From the repo root — no install required, Python stdlib only
+python3 agent/agent.py
+
+# Override address or port
+python3 agent/agent.py --address 0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f --port 8888
+
+# Use local SKILL.md instead of GitHub
+python3 agent/agent.py --skill ./SKILL.md
 ```
 
-After deployment, fund the agent and configure policy:
+Then open **http://localhost:8888** and connect MetaMask.
+
+**Agent server endpoints:**
+
+| Endpoint | Response |
+|---|---|
+| `GET /` | Self-generated HTML dashboard |
+| `GET /health` | `{"status":"ok","agent":"CauldronAgent"}` |
+| `GET /api/info` | Skill config, chain, contracts (JSON) |
+
+### Fund the Agent
 
 ```bash
-# Fund the agent with RITUAL (for buying NFTs)
-cast send <AGENT_ADDRESS> --value 0.5ether --rpc-url https://rpc.ritualfoundation.org --private-key $PRIVATE_KEY
-
-# Set to autonomous mode with 0.1 RITUAL spend ceiling
-# agent.setPolicy(1, 100000000000000000, 100000000000000000, true, true, true, 80)
+cast send 0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f \
+  --value 0.05ether \
+  --rpc-url https://rpc.ritualfoundation.org \
+  --private-key $DEPLOYER_PRIVATE_KEY
 ```
 
-CauldronAgent gas limits:
+### CauldronAgent Gas Limits
 
 | Function | Gas |
 |---|---|
-| `deploy` (constructor) | `3000000` |
-| `buy` via agent | `300000` |
-| `list` via agent | `200000` |
-| `cancelListing` via agent | `100000` |
-| `requestDecision` | `500000` |
 | `setPolicy` | `100000` |
+| `requestDecision` | `500000` |
+| `directBuy` | `300000` |
+| `directList` | `200000` |
+| `directCancel` | `100000` |
+| `approveAction` | `350000` |
 
 ---
+
 
 ## Transaction Requirements
 

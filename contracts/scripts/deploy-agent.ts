@@ -1,30 +1,30 @@
-import { ethers } from "hardhat";
-import * as fs from "fs";
-import * as path from "path";
+const { ethers } = require("ethers");
+const fs = require("fs");
+const path = require("path");
+require("dotenv/config");
 
-/**
- * Deploy CauldronAgent.sol to Ritual Chain
- *
- * Usage:
- *   npx hardhat run scripts/deploy-agent.ts --network ritual
- *
- * Requires:
- *   - DEPLOYER_PRIVATE_KEY in contracts/.env
- *   - Deployer wallet funded with RITUAL for gas + agent seed funds
- */
+function loadArtifact(name: string) {
+  const p = path.join(__dirname, `../artifacts/src/${name}.sol/${name}.json`);
+  return JSON.parse(fs.readFileSync(p, "utf8"));
+}
+
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  const RPC = process.env.RITUAL_RPC_URL || "https://rpc.ritualfoundation.org";
+  const PK  = process.env.DEPLOYER_PRIVATE_KEY;
+  if (!PK) { console.error("Set DEPLOYER_PRIVATE_KEY in .env"); process.exit(1); }
+
+  const provider = new ethers.JsonRpcProvider(RPC);
+  const wallet   = new ethers.Wallet(PK, provider);
 
   console.log("═══════════════════════════════════════════");
   console.log("  CauldronAgent Deployment — Ritual Chain  ");
   console.log("═══════════════════════════════════════════");
-  console.log(`Deployer:  ${deployer.address}`);
-  console.log(`Balance:   ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} RITUAL`);
-  console.log(`Chain ID:  ${(await ethers.provider.getNetwork()).chainId}`);
+  console.log(`Deployer:  ${wallet.address}`);
+  const balance = await provider.getBalance(wallet.address);
+  console.log(`Balance:   ${ethers.formatEther(balance)} RITUAL`);
   console.log();
 
-  // ── Load deployed contract addresses ──────────────────────────────────────
-
+  // Load deployed addresses
   const deployedPath = path.join(__dirname, "../deployed-addresses.json");
   let deployed: any = {};
   if (fs.existsSync(deployedPath)) {
@@ -33,94 +33,66 @@ async function main() {
 
   const MARKETPLACE = deployed.marketplace || process.env.MARKETPLACE_ADDRESS;
   const FACTORY     = deployed.factory     || process.env.FACTORY_ADDRESS;
-
   if (!MARKETPLACE || !FACTORY) {
-    throw new Error(
-      "Missing MARKETPLACE_ADDRESS or FACTORY_ADDRESS. " +
-      "Check deployed-addresses.json or set env vars."
-    );
+    throw new Error("Missing marketplace or factory in deployed-addresses.json");
   }
 
   console.log(`Marketplace: ${MARKETPLACE}`);
   console.log(`Factory:     ${FACTORY}`);
-  console.log();
 
-  // ── Agent Policy Settings ─────────────────────────────────────────────────
-
-  // spendCeiling: max RITUAL per single buy — start conservative at 0.1 RITUAL
   const SPEND_CEILING = ethers.parseEther("0.1");
-
-  console.log(`Spend ceiling: ${ethers.formatEther(SPEND_CEILING)} RITUAL`);
-  console.log(`Mode:          SUPERVISED (0) — requires owner approval for each action`);
+  console.log(`Spend ceiling: 0.1 RITUAL`);
+  console.log(`Mode:          SUPERVISED (0)`);
   console.log();
 
-  // ── Deploy ────────────────────────────────────────────────────────────────
+  // Legacy tx (no EIP-1559 on Ritual Chain)
+  const gasPrice = BigInt("1000000007");
+  const txBase   = { gasPrice, chainId: 1979 };
+  const nonce    = await provider.getTransactionCount(wallet.address, "latest");
 
+  // Deploy CauldronAgent
   console.log("Deploying CauldronAgent...");
-  const CauldronAgent = await ethers.getContractFactory("CauldronAgent");
-  const agent = await CauldronAgent.deploy(
-    MARKETPLACE,
-    FACTORY,
-    SPEND_CEILING,
-    {
-      gasLimit: 3000000,
-      gasPrice: 1000000007,   // 1 gwei — legacy tx for Ritual Chain
-      type:     0,
-    }
-  );
+  const artifact = loadArtifact("CauldronAgent");
+  const factory  = new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
+  const deployTx = await factory.getDeployTransaction(MARKETPLACE, FACTORY, SPEND_CEILING);
+  const sent     = await wallet.sendTransaction({
+    ...txBase,
+    nonce,
+    data: deployTx.data,
+    gasLimit: BigInt(5000000),
+  });
 
-  await agent.waitForDeployment();
-  const agentAddress = await agent.getAddress();
+  console.log(`Tx hash: ${sent.hash}`);
+  console.log("Waiting for confirmation...");
+  const receipt = await sent.wait();
+  const agentAddress = receipt.contractAddress;
 
+  console.log();
   console.log(`✅ CauldronAgent deployed at: ${agentAddress}`);
+  console.log(`Explorer: https://explorer.ritualfoundation.org/address/${agentAddress}`);
   console.log();
 
-  // ── Verify deployment ─────────────────────────────────────────────────────
-
-  const info = await agent.getAgentInfo();
-  console.log("Agent Identity:", info[0]);
-  console.log("Mode:          ", info[1].toString(), "(0=SUPERVISED)");
-  console.log("Spend Ceiling: ", ethers.formatEther(info[2]), "RITUAL");
-  console.log("Allow Buy:     ", info[3]);
-  console.log("Allow List:    ", info[4]);
-  console.log("Allow Cancel:  ", info[5]);
-  console.log("Min Confidence:", info[6].toString(), "%");
-  console.log();
-
-  // ── Save address ──────────────────────────────────────────────────────────
-
+  // Save address
   deployed.cauldronAgent = agentAddress;
   fs.writeFileSync(deployedPath, JSON.stringify(deployed, null, 2));
-  console.log(`✅ Address saved to deployed-addresses.json`);
+  console.log("✅ Address saved to deployed-addresses.json");
   console.log();
 
-  // ── Next steps ────────────────────────────────────────────────────────────
-
+  // Next steps
   console.log("═══════════════════════════════════════════");
   console.log("  Next Steps");
   console.log("═══════════════════════════════════════════");
   console.log();
-  console.log("1. Fund the agent with RITUAL (for buying NFTs):");
-  console.log(`   cast send ${agentAddress} --value 0.5ether --rpc-url https://rpc.ritualfoundation.org`);
+  console.log("1. Run the agent locally:");
+  console.log(`   python3 agent/agent.py --address ${agentAddress}`);
   console.log();
-  console.log("2. If the agent owns NFTs and wants to list them,");
-  console.log("   approve the marketplace for each collection:");
-  console.log(`   agent.approveCollection(<nftContractAddress>)`);
+  console.log("2. Fund the agent:");
+  console.log(`   cast send ${agentAddress} --value 0.05ether --rpc-url ${RPC}`);
   console.log();
-  console.log("3. Request an AI decision:");
-  console.log(`   agent.requestDecision(<nftContract>, <tokenId>, <currentPrice>, "analyze this NFT")`);
-  console.log();
-  console.log("4. In SUPERVISED mode, approve or reject the queued action:");
-  console.log(`   agent.approveAction(<actionId>)`);
-  console.log(`   agent.rejectAction(<actionId>, "too expensive")`);
-  console.log();
-  console.log("5. To switch to AUTONOMOUS mode (use with caution):");
-  console.log(`   agent.setPolicy(1, spendCeiling, maxListPrice, true, true, true, 80)`);
-  console.log();
-  console.log(`Explorer: https://explorer.ritualfoundation.org/address/${agentAddress}`);
+  console.log("3. Open http://localhost:8888 and connect MetaMask");
 }
 
 main().catch((err) => {
-  console.error("Deployment failed:", err);
+  console.error("Deployment failed:", err.message || err);
   process.exit(1);
 });
