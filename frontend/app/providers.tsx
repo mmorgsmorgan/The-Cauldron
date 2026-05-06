@@ -4,6 +4,8 @@ import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { wagmiConfig } from "@/lib/wagmi";
+import { useEffect } from "react";
+import { loadNames } from "@/lib/names";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const queryClient = new QueryClient({
@@ -14,6 +16,14 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+/** Pre-warm name registry at app start — non-blocking */
+function NamesLoader() {
+  useEffect(() => {
+    loadNames().catch(() => {}); // graceful — never blocks render
+  }, []);
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -28,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             fontStack: "system",
           })}
         >
+          <NamesLoader />
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

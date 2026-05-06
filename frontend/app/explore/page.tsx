@@ -5,7 +5,7 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadCont
 import { formatEther } from "viem";
 import { MARKETPLACE_ADDRESS, RitualMarketplace_ABI, FACTORY_ADDRESS, NFTFactory_ABI, AIRitualNFT_ABI } from "@/lib/contracts";
 import { resolveIPFSGateway, raceIPFSFetchJSON } from "@/lib/pinata";
-import { shortenAddress } from "@/lib/api";
+import AddressDisplay from "@/components/layout/AddressDisplay";
 import { useListings } from "@/hooks/useData";
 import Link from "next/link";
 
@@ -111,7 +111,7 @@ function ListingCard({ listing, baseURI }: { listing: ListingEntry; baseURI: str
             </h3>
           </Link>
           <p className="text-xs font-mono mt-0.5 truncate" style={{ color: "rgba(200,247,197,0.2)" }}>
-            by {shortenAddress(listing.seller)}
+            by <AddressDisplay address={listing.seller} linkToProfile />
           </p>
         </div>
 

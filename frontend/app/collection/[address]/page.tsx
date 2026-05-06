@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { MARKETPLACE_ADDRESS, RitualMarketplace_ABI, AIRitualNFT_ABI } from "@/lib/contracts";
 import { resolveIPFSGateway, raceIPFSFetchJSON } from "@/lib/pinata";
-import { shortenAddress } from "@/lib/api";
+import AddressDisplay from "@/components/layout/AddressDisplay";
 import Link from "next/link";
 
 const NFT_ABI = [
@@ -270,7 +270,7 @@ function NFTGridItem({ address, nft, collectionName, fallbackImageUrl }: any) {
           <div className="font-bold text-sm" style={{ color: "var(--mint)" }}>{displayName}</div>
         </div>
         <div className="text-[10px] font-mono" style={{ color: "rgba(200,247,197,0.2)" }}>
-          {nft.owner ? shortenAddress(nft.owner) : "..."}
+          {nft.owner ? <AddressDisplay address={nft.owner} /> : "..."}
         </div>
       </div>
     </Link>

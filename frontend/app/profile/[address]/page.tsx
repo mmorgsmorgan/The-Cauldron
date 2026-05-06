@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { shortenAddress, NFTItem, generateMerkleRoot } from "@/lib/api";
+import { NFTItem, generateMerkleRoot } from "@/lib/api";
+import { shortenAddress } from "@/lib/names";
+import AddressDisplay from "@/components/layout/AddressDisplay";
+import { useRitualName } from "@/hooks/useRitualName";
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, zeroHash, formatEther } from "viem";
 import { FACTORY_ADDRESS, NFTFactory_ABI, MARKETPLACE_ADDRESS, RitualMarketplace_ABI, AIRitualNFT_ABI } from "@/lib/contracts";
@@ -26,6 +29,7 @@ export default function ProfilePage() {
   const isOwn = connectedAddress?.toLowerCase() === address?.toLowerCase();
   const initialTab = (searchParams.get("tab") as TabKey) || "nfts";
   const [tab, setTab] = useState<TabKey>(initialTab);
+  const { display: nameDisplay, name } = useRitualName(address);
 
   // Use cached ownership hook — single multicall, React Query 60s cache
   const { ownedNFTs: rawOwned, isLoading } = useNFTOwnership(address);
@@ -54,7 +58,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex-1">
             <h1 className="font-display font-black text-3xl" style={{ color: "var(--mint)" }}>
-              {isOwn ? "MY PROFILE" : shortenAddress(address || "")}
+              {isOwn ? (name ? name : "MY PROFILE") : nameDisplay}
             </h1>
             <p className="text-xs font-mono mt-1" style={{ color: "rgba(200,247,197,0.2)" }}>{address}</p>
           </div>
@@ -161,7 +165,7 @@ function MyNFTsTab({ nfts, loading, isOwn }: { nfts: NFTItem[]; loading: boolean
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm truncate" style={{ color: "var(--mint)" }}>{selectedNFT.name || `Token #${selectedNFT.tokenId}`}</div>
-              <div className="text-xs font-mono" style={{ color: "rgba(200,247,197,0.2)" }}>{shortenAddress(selectedNFT.contract)}</div>
+              <div className="text-xs font-mono" style={{ color: "rgba(200,247,197,0.2)" }}><AddressDisplay address={selectedNFT.contract} /></div>
             </div>
           </div>
 
