@@ -6,6 +6,7 @@ import { formatEther } from "viem";
 import { MARKETPLACE_ADDRESS, RitualMarketplace_ABI, FACTORY_ADDRESS, NFTFactory_ABI, AIRitualNFT_ABI } from "@/lib/contracts";
 import { resolveIPFSGateway, raceIPFSFetchJSON } from "@/lib/pinata";
 import AddressDisplay from "@/components/layout/AddressDisplay";
+import { shortenAddress } from "@/lib/names";
 import { useListings } from "@/hooks/useData";
 import Link from "next/link";
 

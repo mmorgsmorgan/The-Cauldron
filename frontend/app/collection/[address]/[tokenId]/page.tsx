@@ -6,7 +6,8 @@ import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { MARKETPLACE_ADDRESS, RitualMarketplace_ABI, AIRitualNFT_ABI } from "@/lib/contracts";
 import { resolveIPFSGateway } from "@/lib/pinata";
-import { shortenAddress } from "@/lib/api";
+import { shortenAddress } from "@/lib/names";
+import AddressDisplay from "@/components/layout/AddressDisplay";
 import Link from "next/link";
 
 const NFT_ABI = [
@@ -174,7 +175,7 @@ export default function ItemPage() {
               </div>
               <div>
                 <div className="font-mono text-sm font-bold" style={{ color: "var(--mint)" }}>
-                  {ownerAddress ? shortenAddress(ownerAddress) : "Loading..."}
+                  {ownerAddress ? <AddressDisplay address={ownerAddress} linkToProfile /> : "Loading..."}
                 </div>
                 {isOwner && <div className="text-[10px] font-bold" style={{ color: "rgba(200,247,197,0.3)" }}>YOU</div>}
               </div>
