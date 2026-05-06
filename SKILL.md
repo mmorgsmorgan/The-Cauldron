@@ -60,8 +60,38 @@ Agent infrastructure was added in recent commits. If `agent/agent.py` or `contra
 **Activation path (no npm/npx needed):**
 1. **Agent** starts deploy server: `python3 agent/agent.py --deploy`
 2. **User** opens `http://localhost:8888` → connects MetaMask → clicks Deploy
-3. **Agent** restarts with address: `python3 agent/agent.py --address 0xDeployed`
-4. **User** connects MetaMask at `http://localhost:8888` → agent takes over
+3. **Agent** restarts in autonomous mode: `python3 agent/agent.py --address 0xDeployed --key 0xHotKey`
+4. Agent can now execute on-chain actions directly
+
+**Autonomous execution mode:**
+
+When started with `--key`, the agent can sign and send transactions. The AI chatbot executes actions by calling the local API:
+
+```bash
+# Start with execution capability
+python3 agent/agent.py --address 0xYourAgent --key 0xYourHotWalletKey
+
+# Or use env var (safer — won't show in process list)
+AGENT_HOT_KEY=0xYourKey python3 agent/agent.py --address 0xYourAgent
+```
+
+**Execution API (agents call these via curl):**
+
+| Method | Endpoint | Body | Action |
+|---|---|---|---|
+| POST | `/api/buy` | `{"nft":"0x...","tokenId":1,"price":"0.05"}` | Buy NFT |
+| POST | `/api/list` | `{"nft":"0x...","tokenId":1,"price":"0.1"}` | List NFT |
+| POST | `/api/cancel` | `{"nft":"0x...","tokenId":1}` | Cancel listing |
+| GET | `/api/info` | — | Agent status, balance, policy |
+
+**Example agent action:**
+```bash
+curl -X POST http://localhost:8888/api/buy \
+  -H "Content-Type: application/json" \
+  -d '{"nft":"0xABC...","tokenId":1,"price":"0.05"}'
+```
+
+**Requires:** `pip install web3` (for transaction signing)
 
 ---
 

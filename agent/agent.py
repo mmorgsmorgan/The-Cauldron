@@ -33,6 +33,76 @@ FACTORY        = "0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f"
 CHAIN_ID       = 1979
 RPC_URL        = "https://rpc.ritualfoundation.org"
 
+# ── Execution Engine ──────────────────────────────────────────────────────────
+
+CAULDRON_AGENT_ABI = None  # loaded from CauldronAgent.json at startup
+engine = None              # set in main() if --key is provided
+
+class ExecutionEngine:
+    """Signs and sends transactions using a hot wallet key. Requires: pip install web3"""
+
+    def __init__(self, private_key, agent_address, rpc_url=RPC_URL):
+        try:
+            from web3 import Web3
+            self.Web3 = Web3
+        except ImportError:
+            print("[engine] ERROR: web3 not installed. Run: pip install web3")
+            sys.exit(1)
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
+        self.account = self.w3.eth.account.from_key(private_key)
+        self.agent_address = Web3.to_checksum_address(agent_address)
+        self.contract = self.w3.eth.contract(address=self.agent_address, abi=CAULDRON_AGENT_ABI)
+        print(f"[engine] Hot wallet: {self.account.address}")
+        print(f"[engine] Agent contract: {self.agent_address}")
+        bal = self.w3.eth.get_balance(self.account.address)
+        print(f"[engine] Balance: {self.w3.from_wei(bal, 'ether')} RITUAL")
+
+    def _send(self, fn, gas=300000):
+        tx = fn.build_transaction({
+            "from": self.account.address,
+            "nonce": self.w3.eth.get_transaction_count(self.account.address),
+            "gas": gas, "gasPrice": self.w3.to_wei(1, "gwei"), "chainId": CHAIN_ID,
+        })
+        signed = self.account.sign_transaction(tx)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+        print(f"[engine] Tx: {tx_hash.hex()}")
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+        print(f"[engine] Block {receipt.blockNumber}, status={receipt.status}")
+        return {"tx_hash": tx_hash.hex(), "block": receipt.blockNumber, "status": receipt.status}
+
+    def buy(self, nft, token_id, price_ritual):
+        print(f"[engine] BUY {nft} #{token_id} @ {price_ritual} RITUAL")
+        fn = self.contract.functions.directBuy(
+            self.Web3.to_checksum_address(nft), int(token_id),
+            self.w3.to_wei(float(price_ritual), "ether"))
+        return self._send(fn, gas=300000)
+
+    def list_nft(self, nft, token_id, price_ritual):
+        print(f"[engine] LIST {nft} #{token_id} @ {price_ritual} RITUAL")
+        fn = self.contract.functions.directList(
+            self.Web3.to_checksum_address(nft), int(token_id),
+            self.w3.to_wei(float(price_ritual), "ether"))
+        return self._send(fn, gas=200000)
+
+    def cancel(self, nft, token_id):
+        print(f"[engine] CANCEL {nft} #{token_id}")
+        fn = self.contract.functions.directCancel(
+            self.Web3.to_checksum_address(nft), int(token_id))
+        return self._send(fn, gas=100000)
+
+    def get_info(self):
+        info = self.contract.functions.getAgentInfo().call()
+        return {
+            "mode": ["SUPERVISED","AUTONOMOUS","DRY_RUN"][info[1]],
+            "spend_ceiling": str(self.w3.from_wei(info[2], "ether")),
+            "allow_buy": info[3], "allow_list": info[4], "allow_cancel": info[5],
+            "min_confidence": info[6],
+            "balance": str(self.w3.from_wei(info[7], "ether")),
+            "total_spent": str(self.w3.from_wei(info[8], "ether")),
+            "actions_executed": info[9],
+        }
+
+
 # ── Read SKILL.md ─────────────────────────────────────────────────────────────
 
 def read_skill(path=None):
@@ -445,7 +515,8 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(json.dumps(AgentHandler.info).encode("utf-8"))
+            info = engine.get_info() if engine else AgentHandler.info
+            self.wfile.write(json.dumps(info).encode("utf-8"))
         elif self.path == "/artifact" and AgentHandler.artifact_json:
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -456,6 +527,47 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not found")
+
+    def do_POST(self):
+        """Handle execution requests from AI agents."""
+        global engine
+        if not engine:
+            self._json_response(503, {"error": "No execution engine. Start with --key"})
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length)) if length else {}
+
+        try:
+            if self.path == "/api/buy":
+                result = engine.buy(body["nft"], body["tokenId"], body["price"])
+                self._json_response(200, {"ok": True, **result})
+            elif self.path == "/api/list":
+                result = engine.list_nft(body["nft"], body["tokenId"], body["price"])
+                self._json_response(200, {"ok": True, **result})
+            elif self.path == "/api/cancel":
+                result = engine.cancel(body["nft"], body["tokenId"])
+                self._json_response(200, {"ok": True, **result})
+            elif self.path == "/api/info":
+                self._json_response(200, engine.get_info())
+            else:
+                self._json_response(404, {"error": "Unknown endpoint"})
+        except Exception as e:
+            print(f"[engine] Error: {e}")
+            self._json_response(500, {"error": str(e)})
+
+    def _json_response(self, code, data):
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode("utf-8"))
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def log_message(self, fmt, *args):
         print(f"[http] {args[0]} {args[1]}")
@@ -480,11 +592,14 @@ def load_artifact():
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    global engine, CAULDRON_AGENT_ABI
     parser = argparse.ArgumentParser(description="CauldronAgent — User-Owned Agent Infrastructure")
     parser.add_argument("--address", default=None,
                         help="Deployed CauldronAgent contract address (0x...)")
     parser.add_argument("--deploy",  action="store_true",
                         help="Deploy mode — browser UI to deploy via MetaMask")
+    parser.add_argument("--key",     default=os.environ.get("AGENT_HOT_KEY"),
+                        help="Private key for autonomous execution (or set AGENT_HOT_KEY env)")
     parser.add_argument("--port",    type=int, default=8888, help="Port (default: 8888)")
     parser.add_argument("--skill",   default=None,           help="Path to local SKILL.md")
     args = parser.parse_args()
@@ -493,11 +608,24 @@ def main():
         print("Usage:")
         print("  Deploy new agent:  python3 agent.py --deploy")
         print("  Manage existing:   python3 agent.py --address 0xYourAgent")
+        print("  Autonomous mode:   python3 agent.py --address 0xYourAgent --key 0xYourKey")
         sys.exit(1)
 
     skill_text = read_skill(args.skill)
     skill_info = parse_skill(skill_text)
     AgentHandler.artifact_json = load_artifact()
+
+    # Load ABI for execution engine
+    if AgentHandler.artifact_json:
+        CAULDRON_AGENT_ABI = json.loads(AgentHandler.artifact_json).get("abi")
+
+    # Initialize execution engine if key is provided
+    if args.key and args.address:
+        engine = ExecutionEngine(args.key, args.address)
+        skill_info["execution"] = "autonomous"
+        print(f"[agent] ⚡ AUTONOMOUS MODE — agent can execute on-chain actions")
+    elif args.key:
+        print("[agent] Warning: --key provided but no --address. Ignoring key.")
 
     if args.deploy:
         print("=" * 52)
