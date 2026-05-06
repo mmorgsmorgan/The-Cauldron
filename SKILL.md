@@ -42,23 +42,24 @@ The Cauldron is **infrastructure for user-owned AI agents** on Ritual Chain. Eac
 
 ## Quick Start
 
-### 1. Deploy Agent Contract
+### 1. Create a Hot Wallet
 
-```bash
-git pull origin main
-python3 agent/agent.py --deploy
-# Open http://localhost:8888 → Connect MetaMask → Click Deploy
-# Note the deployed address
-```
-
-### 2. Create a Hot Wallet
-
-Create a **separate** wallet for the agent (never use your main wallet's key):
+Create a **dedicated** wallet for the agent (never use your main wallet's key):
 
 ```bash
 # MetaMask → Create Account → copy private key
-# Fund it with a small amount of RITUAL
-cast send 0xNewHotWallet --value 0.05ether --rpc-url https://rpc.ritualfoundation.org --private-key $YOUR_MAIN_KEY
+# Fund it with enough for gas + trading
+cast send 0xNewHotWallet --value 0.1ether --rpc-url https://rpc.ritualfoundation.org --private-key $YOUR_MAIN_KEY
+```
+
+### 2. Deploy Agent Contract
+
+Connect the hot wallet in MetaMask, then deploy. The hot wallet becomes the contract owner.
+
+```bash
+python3 agent/agent.py --deploy
+# Open http://localhost:8888 → Connect hot wallet in MetaMask → Click Deploy
+# Note the deployed agent address
 ```
 
 ### 3. Start Agent in Autonomous Mode
