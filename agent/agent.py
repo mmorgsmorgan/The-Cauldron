@@ -189,34 +189,22 @@ def generate_html(agent_address, skill_info):
       <button onclick="setPolicy()">Update Policy On-Chain</button>
     </div>
 
-    <!-- Request Decision -->
+
+    <!-- How It Works -->
     <div class="section">
-      <h2>🧠 Request AI Decision</h2>
-      <label>NFT Contract Address</label>
-      <input id="act-nft" placeholder="0x..."/>
-      <div class="row2">
-        <div><label>Token ID</label><input id="act-token" type="number" value="0"/></div>
-        <div><label>Current Price (RITUAL)</label><input id="act-price" type="number" step="0.001" value="0"/></div>
+      <h2>💬 How to Use Your Agent</h2>
+      <div style="font-size:.85rem;color:var(--muted);line-height:1.7;">
+        <p>Your agent reads SKILL.md and operates on The Cauldron autonomously.</p>
+        <p style="margin-top:.5rem;"><strong style="color:var(--mint);">Talk to it in chat:</strong></p>
+        <ul style="margin-left:1rem;margin-top:.3rem;">
+          <li>"Buy NFT #42 from collection 0xABC..."</li>
+          <li>"List my NFT at 0.05 RITUAL"</li>
+          <li>"Analyze the floor price and tell me if I should buy"</li>
+        </ul>
+        <p style="margin-top:.5rem;">This dashboard is for <strong style="color:var(--mint);">monitoring and policy only</strong>.</p>
       </div>
-      <label>Context / Instructions</label>
-      <textarea id="act-context" rows="2" placeholder="e.g. Floor dropped 20%, consider buying"></textarea>
-      <button onclick="requestDecision()">🧠 Submit to Sovereign Agent Precompile</button>
     </div>
 
-    <!-- Direct Actions -->
-    <div class="section">
-      <h2>⚡ Direct Actions (Owner Override)</h2>
-      <label>NFT Contract</label>
-      <input id="dir-nft" placeholder="0x..."/>
-      <div class="row2">
-        <div><label>Token ID</label><input id="dir-token" type="number" value="0"/></div>
-        <div><label>Price (RITUAL)</label><input id="dir-price" type="number" step="0.001" value="0.05"/></div>
-      </div>
-      <div class="row2">
-        <button onclick="directBuy()">Buy NFT</button>
-        <button onclick="directList()">List NFT</button>
-      </div>
-    </div>
 
     <!-- Log -->
     <div class="section">
@@ -237,9 +225,6 @@ const AGENT_ABI = [
   "function getAgentInfo() view returns (string,uint8,uint256,bool,bool,bool,uint8,uint256,uint256,uint256)",
   "function getPendingQueueLength() view returns (uint256)",
   "function setPolicy(uint8,uint256,uint256,bool,bool,bool,uint8)",
-  "function requestDecision(address,uint256,uint256,string) returns (bytes32)",
-  "function directBuy(address,uint256,uint256)",
-  "function directList(address,uint256,uint256)",
   "function owner() view returns (address)",
 ];
 
@@ -267,7 +252,6 @@ async function connectWallet() {
   try {
     provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send("eth_requestAccounts", []);
-    // Switch to Ritual Chain
     try {
       await provider.send("wallet_switchEthereumChain", [{ chainId: "0x" + CHAIN.toString(16) }]);
     } catch(e) {
@@ -336,65 +320,9 @@ async function setPolicy() {
   } catch(e) { log("Error: " + e.message, "err"); }
 }
 
-async function requestDecision() {
-  if (!contract) { log("Connect wallet first", "err"); return; }
-  const nft = document.getElementById("act-nft").value;
-  if (!nft.match(/^0x[0-9a-fA-F]{40}$/)) { log("Invalid NFT address", "err"); return; }
-  try {
-    log("Submitting to Sovereign Agent precompile...", "inf");
-    const tx = await contract.requestDecision(
-      nft,
-      BigInt(document.getElementById("act-token").value || "0"),
-      ethers.parseEther(document.getElementById("act-price").value || "0"),
-      document.getElementById("act-context").value || "Analyze this NFT",
-      { gasLimit: 500000n }
-    );
-    log("Tx sent: " + tx.hash, "inf");
-    await tx.wait();
-    log("Decision requested! Await AsyncDelivery callback.", "ok");
-  } catch(e) { log("Error: " + e.message, "err"); }
-}
-
-async function directBuy() {
-  if (!contract) { log("Connect wallet first", "err"); return; }
-  const nft   = document.getElementById("dir-nft").value;
-  const price = document.getElementById("dir-price").value;
-  if (!nft.match(/^0x[0-9a-fA-F]{40}$/)) { log("Invalid address", "err"); return; }
-  try {
-    log("Buying NFT...", "inf");
-    const tx = await contract.directBuy(
-      nft,
-      BigInt(document.getElementById("dir-token").value || "0"),
-      ethers.parseEther(price),
-      { gasLimit: 300000n }
-    );
-    log("Tx sent: " + tx.hash, "inf");
-    await tx.wait();
-    log("NFT bought!", "ok");
-  } catch(e) { log("Error: " + e.message, "err"); }
-}
-
-async function directList() {
-  if (!contract) { log("Connect wallet first", "err"); return; }
-  const nft   = document.getElementById("dir-nft").value;
-  const price = document.getElementById("dir-price").value;
-  if (!nft.match(/^0x[0-9a-fA-F]{40}$/)) { log("Invalid address", "err"); return; }
-  try {
-    log("Listing NFT...", "inf");
-    const tx = await contract.directList(
-      nft,
-      BigInt(document.getElementById("dir-token").value || "0"),
-      ethers.parseEther(price),
-      { gasLimit: 200000n }
-    );
-    log("Tx sent: " + tx.hash, "inf");
-    await tx.wait();
-    log("NFT listed!", "ok");
-  } catch(e) { log("Error: " + e.message, "err"); }
-}
-
-log("Agent UI loaded. Connect your wallet to begin.", "inf");
-log("Agent contract: " + AGENT, "inf");
+log("Agent dashboard loaded.", "inf");
+log("Agent: " + AGENT, "inf");
+log("Your agent handles buying, listing, and AI decisions via chat.", "inf");
 </script>
 </body>
 </html>"""
