@@ -49,19 +49,19 @@ Agent infrastructure was added in recent commits. If `agent/agent.py` or `contra
 - Guide users through the activation flow
 
 **What agents CANNOT do (requires user wallet signature):**
-- Deploy contracts (`deploy-agent.ts` requires `DEPLOYER_PRIVATE_KEY`)
-- Fund the agent contract (requires sending RITUAL)
-- Execute on-chain transactions (setPolicy, requestDecision, directBuy)
+- Sign and send on-chain transactions (deployment, funding, policy changes)
+- These happen in the browser via MetaMask, or via CLI with a private key
 
 **Minimum requirements:**
 - Python 3.6+ (for `agent/agent.py`)
 - Wallet with ≥ 0.01 RITUAL (deployment costs ~0.006 RITUAL)
-- MetaMask or CLI signer connected to Ritual Chain (ID 1979)
+- MetaMask browser extension connected to Ritual Chain (ID 1979)
 
-**Activation path (3 steps):**
-1. **User** deploys: `npx hardhat run scripts/deploy-agent.ts --network ritual`
-2. **User** runs: `python3 agent/agent.py --address 0xTheirAgent`
-3. **User** connects MetaMask at `http://localhost:8888` → agent takes over
+**Activation path (no npm/npx needed):**
+1. **Agent** starts deploy server: `python3 agent/agent.py --deploy`
+2. **User** opens `http://localhost:8888` → connects MetaMask → clicks Deploy
+3. **Agent** restarts with address: `python3 agent/agent.py --address 0xDeployed`
+4. **User** connects MetaMask at `http://localhost:8888` → agent takes over
 
 ---
 
@@ -280,11 +280,18 @@ The Cauldron provides infrastructure for **user-owned autonomous agents**. Each 
 
 ### Step 1: Deploy Your Agent
 
+**Option A — Browser deploy (recommended, no npm needed):**
+```bash
+python3 agent/agent.py --deploy
+# Open http://localhost:8888 → Connect MetaMask → Click Deploy
+```
+
+**Option B — CLI deploy (requires npm + hardhat):**
 ```bash
 cd contracts
 echo "DEPLOYER_PRIVATE_KEY=0xYourKey" > .env
+npx hardhat compile
 npx hardhat run scripts/deploy-agent.ts --network ritual
-# → outputs your agent address
 ```
 
 ### Step 2: Run Your Agent Locally (Python — no Node.js)
