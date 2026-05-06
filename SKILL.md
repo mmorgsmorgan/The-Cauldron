@@ -1,22 +1,16 @@
 ---
 name: the-cauldron
-description: The Cauldron NFT launchpad & marketplace on Ritual Chain. Use when building, debugging, or interacting with The Cauldron dApp.
+description: The Cauldron NFT launchpad & marketplace on Ritual Chain. User-owned autonomous agent infrastructure.
 user_invocable: true
 ---
 
-<!-- AGENT OPERATING RULES — Read before doing anything. Not shown to user. -->
+<!-- AGENT OPERATING RULES — Read before doing anything. -->
 <!-- Rule 0: Ritual ≠ Ethereum — block.timestamp is MILLISECONDS (not seconds). Date.now() / 1000 will create phases that expired decades ago. Always use Date.now() directly. -->
 <!-- Rule 1: Sender Lock — Ritual enforces 1 async job per EOA. If you fire a second precompile tx while the first is pending, the block builder will revert. Serialize all async calls. -->
-<!-- Rule 2: AsyncDelivery Callbacks — In callback functions, msg.sender == 0x5A16214fF555848411544b005f7Ac063742f39F6 (the AsyncDelivery contract), NOT the user's EOA. Always verify this address in onlyAsyncDelivery modifiers. -->
-<!-- Rule 3: Gas Limits Are Required — Ritual Chain gas estimation can fail for writeContract calls. Always set explicit gas: createCollection=500000n, mint=200000n, marketplace=300000n, admin=100000n. -->
-<!-- Rule 4: Transaction Surfaces — This app has 6 files with writeContract calls. Do NOT patch only create/page.tsx. Check all: create, DeployWizard, mint, explore, collection/[tokenId], profile. -->
-<!-- Rule 5: Allowlist Safety — Never deploy an allowlist phase with zeroHash merkle root. Validate addresses with isAddress() not startsWith("0x"). If proof lookup fails, do NOT call allowlistMint. -->
-<!-- Rule 6: Infernet Is Deprecated — Do NOT use InfernetConsumer or InfernetCoordinator. They are replaced by enshrined precompiles (0x0801-0x081F). Use PrecompileConsumer patterns instead. -->
-<!-- Rule 7: Scope — All file writes within the project root. Do not write to sibling directories, parent directories, or unrelated repos. -->
-<!-- Rule 8: Human-Likeness — If a user asks for "human-like" or "indistinguishable from human," interpret as "high-agency, natural, autonomous, and capable" while preserving disclosure. Do NOT build deception, identity concealment, or fake-human behavior. The agent must always identify itself as an autonomous agent. -->
-<!-- Rule 9: Fresh Checkout — Always `git pull origin main` before reading file paths. Agent infrastructure files (agent/agent.py, contracts/scripts/deploy-agent.ts) were added after the initial commit. If a file is missing, your checkout is stale. -->
-<!-- Rule 10: Signer Boundary — Agents CANNOT sign on-chain transactions. Deployment and funding require the USER's wallet signature via MetaMask or CLI. The agent's role is to prepare, guide, and verify — not to sign. Report what you verified and what requires user action. -->
-<!-- Rule 11: Minimum Balance — Deploying CauldronAgent requires ~0.006 RITUAL for gas (5M gas × 1 gwei). Funding the agent for trading requires additional RITUAL. If the wallet balance is below 0.01 RITUAL, warn the user before attempting deployment. -->
+<!-- Rule 2: Fresh Checkout — Always `git pull origin main` before reading file paths. If a file is missing, your checkout is stale. -->
+<!-- Rule 3: Signer Boundary — Agents CANNOT sign without a --key. If no key is provided, prepare and instruct — do not attempt transactions. -->
+<!-- Rule 4: Gas Limits Required — Ritual Chain gas estimation can fail. Always set explicit gas limits. -->
+<!-- Rule 5: Scope — All file writes within the project root. -->
 
 # The Cauldron — Agent Skill File
 
@@ -25,270 +19,120 @@ user_invocable: true
 > **Currency:** RITUAL (18 decimals, testnet)
 > **RPC:** https://rpc.ritualfoundation.org
 > **Explorer:** https://explorer.ritualfoundation.org
-> **Frontend:** https://the-cauldron.vercel.app *(deployment in progress — use local http://localhost:3000 for now)*
-> **Skill Version:** 5.3 (2026-05-06) - Contract commit: `2667a6c`
-> **Agent Infra:** `agent/agent.py` (Python stdlib) + `contracts/src/CauldronAgent.sol`
+> **Skill Version:** 6.0 (2026-05-06)
 
 ---
 
-## Agent Activation Prerequisites
+## What This Is
 
-**Before doing anything, run:**
+The Cauldron is **infrastructure for user-owned AI agents** on Ritual Chain. Each user deploys their own agent contract, funds it with RITUAL, and runs a local Python server that gives the agent autonomous control over NFT operations.
+
+**The agent can:**
+- Deploy NFT collections
+- Buy NFTs from the marketplace
+- List NFTs for sale
+- Cancel listings
+- Read collection data and marketplace state
+
+**The agent cannot (without user action):**
+- Deploy its own contract (user does this once)
+- Access more funds than the user provides
+
+---
+
+## Quick Start
+
+### 1. Deploy Agent Contract
 
 ```bash
 git pull origin main
+python3 agent/agent.py --deploy
+# Open http://localhost:8888 → Connect MetaMask → Click Deploy
+# Note the deployed address
 ```
 
-Agent infrastructure was added in recent commits. If `agent/agent.py` or `contracts/scripts/deploy-agent.ts` are missing, your checkout is stale.
+### 2. Create a Hot Wallet
 
-**What agents CAN do:**
-- Read SKILL.md and understand capabilities
-- Verify RPC connectivity, wallet balances, contract state
-- Prepare deployment commands and configuration
-- Run `agent/agent.py` locally (Python 3 stdlib, no install needed)
-- Guide users through the activation flow
-
-**What agents CANNOT do (requires user wallet signature):**
-- Sign and send on-chain transactions (deployment, funding, policy changes)
-- These happen in the browser via MetaMask, or via CLI with a private key
-
-**Minimum requirements:**
-- Python 3.6+ (for `agent/agent.py`)
-- Wallet with ≥ 0.01 RITUAL (deployment costs ~0.006 RITUAL)
-- MetaMask browser extension connected to Ritual Chain (ID 1979)
-
-**Activation path (no npm/npx needed):**
-1. **Agent** starts deploy server: `python3 agent/agent.py --deploy`
-2. **User** opens `http://localhost:8888` → connects MetaMask → clicks Deploy
-3. **Agent** restarts in autonomous mode: `python3 agent/agent.py --address 0xDeployed --key 0xHotKey`
-4. Agent can now execute on-chain actions directly
-
-**Autonomous execution mode:**
-
-When started with `--key`, the agent can sign and send transactions. The AI chatbot executes actions by calling the local API:
+Create a **separate** wallet for the agent (never use your main wallet's key):
 
 ```bash
-# Start with execution capability
-python3 agent/agent.py --address 0xYourAgent --key 0xYourHotWalletKey
-
-# Or use env var (safer — won't show in process list)
-AGENT_HOT_KEY=0xYourKey python3 agent/agent.py --address 0xYourAgent
+# MetaMask → Create Account → copy private key
+# Fund it with a small amount of RITUAL
+cast send 0xNewHotWallet --value 0.05ether --rpc-url https://rpc.ritualfoundation.org --private-key $YOUR_MAIN_KEY
 ```
 
-**Execution API (agents call these via curl):**
+### 3. Start Agent in Autonomous Mode
 
-| Method | Endpoint | Body | Action |
+```bash
+pip install web3
+
+# Start the agent (use env var for safety)
+export AGENT_HOT_KEY=0xHotWalletPrivateKey
+python3 agent/agent.py --address 0xYourDeployedAgent
+```
+
+The agent is now live at `http://localhost:8888` with full execution capability.
+
+---
+
+## Execution API
+
+When started with `--key` (or `AGENT_HOT_KEY` env var), the agent exposes these endpoints:
+
+### Endpoints
+
+| Method | Path | Body | Action |
 |---|---|---|---|
-| POST | `/api/buy` | `{"nft":"0x...","tokenId":1,"price":"0.05"}` | Buy NFT |
-| POST | `/api/list` | `{"nft":"0x...","tokenId":1,"price":"0.1"}` | List NFT |
-| POST | `/api/cancel` | `{"nft":"0x...","tokenId":1}` | Cancel listing |
-| GET | `/api/info` | — | Agent status, balance, policy |
+| `POST` | `/api/buy` | `{"nft":"0x...","tokenId":1,"price":"0.05"}` | Buy NFT |
+| `POST` | `/api/list` | `{"nft":"0x...","tokenId":1,"price":"0.1"}` | List NFT for sale |
+| `POST` | `/api/cancel` | `{"nft":"0x...","tokenId":1}` | Cancel a listing |
+| `GET` | `/api/info` | — | Agent status, balance, policy |
+| `GET` | `/health` | — | Health check |
 
-**Example agent action:**
+### Examples
+
+**Buy an NFT:**
 ```bash
 curl -X POST http://localhost:8888/api/buy \
   -H "Content-Type: application/json" \
-  -d '{"nft":"0xABC...","tokenId":1,"price":"0.05"}'
+  -d '{"nft":"0x1234...","tokenId":1,"price":"0.05"}'
 ```
 
-**Requires:** `pip install web3` (for transaction signing)
+**List an NFT for sale:**
+```bash
+curl -X POST http://localhost:8888/api/list \
+  -H "Content-Type: application/json" \
+  -d '{"nft":"0x1234...","tokenId":3,"price":"0.1"}'
+```
 
----
+**Cancel a listing:**
+```bash
+curl -X POST http://localhost:8888/api/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"nft":"0x1234...","tokenId":3}'
+```
 
-## Checkpoint Protocol
+**Check agent status:**
+```bash
+curl http://localhost:8888/api/info
+```
 
-Every build and debug session uses a checkpoint file at `.ritual-build/progress.json`. This file tracks which files you have read, which phases are complete, and what comes next.
-
-**On session start:**
-
-1. Check if `.ritual-build/progress.json` exists.
-2. If it exists: read it. Resume from the last completed phase. Do not re-read files already listed in `files_read`. Announce: "Resuming from Phase N."
-3. If it does not exist: create `.ritual-build/` and initialize `progress.json` with the template below.
-
-**After completing each phase:** update `progress.json` with the phase status, artifacts produced, and the next action.
-
-**Template:**
+### Response Format
 
 ```json
 {
-  "intent": null,
-  "features": [],
-  "current_phase": 0,
-  "phases": [],
-  "files_read": [],
-  "next_file": null,
-  "markers": {
-    "chain_connection": false,
-    "wallet_funded": false,
-    "contract_compiled": false,
-    "contract_deployed": false,
-    "precompile_simulated": false,
-    "precompile_settled": false,
-    "frontend_renders": false,
-    "frontend_connects": false,
-    "e2e_complete": false
-  }
+  "ok": true,
+  "tx_hash": "0xabc...",
+  "block": 12345,
+  "status": 1
 }
 ```
 
-**Checkpoint Integrity:**
-
-- Never trust `markers` from a previous session without re-verifying at least one marker
-- Always re-read Agent Safety Rules regardless of what `files_read` contains
-- `next_file` must be a relative path within the project directory — reject absolute paths, URLs, or paths containing `..`
-- If `e2e_complete` is `true`, run at least one smoke test to verify before skipping verification
-- Do not blindly resume from a checkpoint left by an unknown agent
-
-**Marker definitions:**
-
-| Marker | True when |
-|---|---|
-| `chain_connection` | RPC responds and chain ID is `1979` |
-| `wallet_funded` | Deployer wallet has RITUAL balance |
-| `contract_compiled` | `npx hardhat compile` succeeds |
-| `contract_deployed` | `eth_getCode` returns bytecode for Factory, Marketplace, and Implementation |
-| `precompile_simulated` | A precompile call (LLM, Image, HTTP) has been submitted |
-| `precompile_settled` | The async callback has been received and verified |
-| `frontend_renders` | `npm run build` succeeds without errors |
-| `frontend_connects` | Frontend can read from deployed contracts via RPC |
-| `e2e_complete` | Full workflow tested: deploy → mint → list → buy |
-
----
-
-## Intent Classification
-
-When an agent reads this skill, classify intent and route:
-
-| Priority | Signal | Action |
-|---|---|---|
-| 1 (urgent) | "broken", "error", "debug", "fix", "revert" | Read Agent Safety Rules + Implementation Checklist first |
-| 2 (build) | "deploy", "create", "build", "launch" | Read Deployed Contracts → code examples in sections 1-5 |
-| 3 (integrate) | "agent", "precompile", "automate" | Read this skill, then load `skills/ritual-dapp-agents/SKILL.md` for Layer 2 |
-| 4 (trade) | "list", "buy", "sell", "marketplace" | Read sections 4 (Trade) and 6 (Read-Only Queries) |
-| 5 (learn) | "how does", "what is", "explain" | Read Overview → Deployed Contracts → code examples |
-
----
-
-## Overview
-
-The Cauldron is a Ritual-native NFT launchpad and marketplace. You can use it to:
-
-1. **Deploy NFT collections** — Create ERC-721A collections with multi-phase minting (allowlist + public)
-2. **Manage mint phases** — Set allowlists via Merkle trees, configure pricing and timing
-3. **Mint NFTs** — Mint via allowlist (with Merkle proof) or public mint
-4. **Trade NFTs** — List, buy, and cancel listings on the marketplace
-5. **Manage collections** — Update metadata, royalties, and mint parameters
-
-All actions are on-chain via Ritual Chain smart contracts. No off-chain API is required for core operations.
-
----
-
-## ⚠️ Common Agent Mistake
-
-**Do not patch only `frontend/app/create/page.tsx`.**
-
-The app has multiple transaction surfaces. If gas, timestamp, or allowlist fixes are needed, inspect every `writeContract` call across `frontend/app` and `frontend/components`.
-
----
-
-## Local Project Layout
-
-```
-The-Cauldron/
-├── contracts/          # Solidity contracts (Hardhat + ERC721A)
-│   ├── src/            # AIRitualNFT.sol, NFTFactory.sol, RitualMarketplace.sol
-│   ├── scripts/        # Deploy scripts (deploy-raw.js for Ritual Chain)
-│   └── test/           # Hardhat test suite
-├── frontend/           # Next.js 14 app (App Router)
-│   ├── app/            # Pages: create, mint, explore, collections, profile
-│   ├── components/     # DeployWizard, NFTCard, Navbar
-│   ├── lib/            # contracts.ts, api.ts, chains.ts, pinata.ts
-│   └── hooks/          # useData, useNFTOwnership
-├── backend/            # Fastify API + PostgreSQL indexer
-│   ├── src/routes/     # /collections, /listings, /merkle
-│   ├── src/indexer/    # On-chain event listener
-│   └── src/db/         # Schema, queries, pool
-├── SKILL.md            # This file
-├── docker-compose.yml  # Local dev stack
-└── .gitignore
-```
-
-## Required Setup
-
-```bash
-# Contracts
-cd contracts
-npm ci
-npx hardhat compile
-npx hardhat test
-
-# Frontend
-cd ../frontend
-npm ci
-cp .env.example .env.local   # Edit with your values
-npm run dev                  # http://localhost:3000
-
-# Backend
-cd ../backend
-npm install
-cp .env.example .env         # Edit DATABASE_URL
-npm run build
-npm run start                # http://localhost:3001
-```
-
-## Verification Commands
-
-Use these to confirm the project builds correctly:
-
-```bash
-# Contracts compile and tests pass
-cd contracts && npx hardhat compile && npx hardhat test
-
-# Frontend builds without errors
-cd ../frontend && npm run build
-
-# Backend builds without errors
-cd ../backend && npm run build
-
-# Verify deployed contracts have bytecode on Ritual Chain
-cast code 0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f --rpc-url https://rpc.ritualfoundation.org
-cast code 0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B --rpc-url https://rpc.ritualfoundation.org
-```
-
-## Expected Environment
-
-### Frontend (`frontend/.env.local`)
-
-```env
-NEXT_PUBLIC_RITUAL_RPC=https://rpc.ritualfoundation.org
-NEXT_PUBLIC_CHAIN_ID=1979
-NEXT_PUBLIC_EXPLORER=https://explorer.ritualfoundation.org
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_FACTORY_ADDRESS=0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f
-NEXT_PUBLIC_MARKETPLACE_ADDRESS=0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B
-
-# Pinata IPFS JWT keys (get from https://app.pinata.cloud)
-NEXT_PUBLIC_PINATA_JWT_1=
-NEXT_PUBLIC_PINATA_JWT_2=
-NEXT_PUBLIC_PINATA_JWT_3=
-```
-
-### Backend (`backend/.env`)
-
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/ritualpad
-API_PORT=3001
-API_HOST=0.0.0.0
-RPC_URL=https://rpc.ritualfoundation.org
-FACTORY_ADDRESS=0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f
-MARKETPLACE_ADDRESS=0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B
-```
-
-### Contracts (`contracts/.env`)
-
-```env
-PRIVATE_KEY=0x...  # Deployer wallet private key (NEVER commit this)
-RPC_URL=https://rpc.ritualfoundation.org
+On error:
+```json
+{
+  "error": "reason string"
+}
 ```
 
 ---
@@ -297,762 +141,301 @@ RPC_URL=https://rpc.ritualfoundation.org
 
 | Contract | Address | Role |
 |---|---|---|
-| **NFTFactory** | `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` | Deploys new NFT collections as EIP-1167 minimal proxy clones |
-| **RitualMarketplace** | `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` | Escrow-less NFT marketplace with ERC-2981 royalty enforcement |
-| **AIRitualNFT (impl)** | `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` | Implementation template for collection clones |
-| **CauldronAgent** | `user-deployed` (ref: `0xCb9d...D28f`) | User-owned autonomous agent — each user deploys their own |
+| **NFTFactory** | `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` | Deploys NFT collections (EIP-1167 clones) |
+| **RitualMarketplace** | `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` | NFT marketplace with ERC-2981 royalties |
+| **AIRitualNFT (impl)** | `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` | Collection template |
+| **CauldronAgent** | User-deployed (ref: `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f`) | Autonomous agent contract |
 
-### CauldronAgent — User-Owned Agent Infrastructure
+---
 
-The Cauldron provides infrastructure for **user-owned autonomous agents**. Each user deploys their own `CauldronAgent.sol` contract, controls their own policy, and runs their own local dashboard. No central server manages your agent.
+## Agent Architecture
 
-**Reference deployment:** `0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f` ([explorer](https://explorer.ritualfoundation.org/address/0xCb9d6B52110f6b493D6F39aCC92CC077f6B4D28f))
-
-### Step 1: Deploy Your Agent
-
-**Option A — Browser deploy (recommended, no npm needed):**
-```bash
-python3 agent/agent.py --deploy
-# Open http://localhost:8888 → Connect MetaMask → Click Deploy
+```
+User (chat) → AI Agent → curl localhost:8888/api/* → agent.py → signs tx → Ritual Chain
+                                                        ↑
+                                                   hot wallet key
 ```
 
-**Option B — CLI deploy (requires npm + hardhat):**
-```bash
-cd contracts
-echo "DEPLOYER_PRIVATE_KEY=0xYourKey" > .env
-npx hardhat compile
-npx hardhat run scripts/deploy-agent.ts --network ritual
-```
+### Files
 
-### Step 2: Run Your Agent Locally (Python — no Node.js)
-
-```bash
-python3 agent/agent.py --address 0xYourDeployedAgent
-
-# Custom port
-python3 agent/agent.py --address 0xYourDeployedAgent --port 9000
-
-# Use local SKILL.md
-python3 agent/agent.py --address 0xYourDeployedAgent --skill ./SKILL.md
-```
-
-Then open **http://localhost:8888** → connect MetaMask → your agent is live.
-
-**Agent server endpoints:**
-
-| Endpoint | Response |
+| File | Purpose |
 |---|---|
-| `GET /` | Self-generated HTML dashboard |
-| `GET /health` | `{"status":"ok","agent":"CauldronAgent"}` |
-| `GET /api/info` | Skill config, chain, contracts (JSON) |
+| `agent/agent.py` | Local server: dashboard + execution API |
+| `agent/CauldronAgent.json` | Contract ABI + bytecode (for deploy mode) |
+| `contracts/src/CauldronAgent.sol` | Agent contract source |
+| `contracts/scripts/deploy-agent.ts` | Hardhat deploy script (alternative) |
+| `SKILL.md` | This file — agent reads for capabilities |
 
-### Step 3: Fund Your Agent
+### CLI Flags
 
-```bash
-cast send <YOUR_AGENT_ADDRESS> \
-  --value 0.05ether \
-  --rpc-url https://rpc.ritualfoundation.org \
-  --private-key $YOUR_PRIVATE_KEY
+```
+python3 agent/agent.py [options]
+
+  --deploy              Deploy mode: MetaMask-based deploy UI
+  --address 0x...       Agent contract address
+  --key 0x...           Hot wallet private key (or use AGENT_HOT_KEY env)
+  --port 8888           Server port (default: 8888)
+  --skill ./SKILL.md    Custom SKILL.md path
 ```
 
-### CauldronAgent Gas Limits
+### Dependencies
 
-| Function | Gas |
+- **Monitoring mode** (no --key): Python 3.6+ stdlib only
+- **Autonomous mode** (with --key): `pip install web3`
+
+---
+
+## Dashboard
+
+The dashboard at `http://localhost:8888` shows:
+
+- **Agent Balance** — how much RITUAL the agent has
+- **Total Spent** — cumulative spending
+- **Actions Executed** — transaction count
+- **Pending Queue** — supervised-mode queue
+- **Policy Controls** — mode, spend ceiling, permissions
+- **Activity Log** — on-chain events
+
+The dashboard is for **monitoring and policy only**. The agent handles all actions via chat.
+
+---
+
+## Policy Settings
+
+Users control agent behavior through on-chain policy:
+
+| Setting | Values | Purpose |
+|---|---|---|
+| **Mode** | SUPERVISED / AUTONOMOUS / DRY_RUN | Controls execution behavior |
+| **Spend Ceiling** | RITUAL amount | Max per-action spend |
+| **Min Confidence** | 0-100% | AI confidence threshold |
+| **Allow Buy** | true/false | Can the agent buy NFTs |
+| **Allow List** | true/false | Can the agent list NFTs |
+| **Allow Cancel** | true/false | Can the agent cancel listings |
+
+**Modes:**
+- `SUPERVISED` — agent queues actions, user approves
+- `AUTONOMOUS` — agent executes immediately
+- `DRY_RUN` — agent logs actions but doesn't execute
+
+---
+
+## NFT Operations Reference
+
+### Deploy a New Collection
+
+**Contract:** `NFTFactory.createCollection()`
+
+```solidity
+function createCollection(
+    string name,
+    string symbol,
+    string baseURI,
+    address royaltyReceiver,
+    uint96  royaltyBps,          // 500 = 5%
+    MintPhase[] phases
+)
+```
+
+**MintPhase struct:**
+```solidity
+struct MintPhase {
+    uint256 price;               // in wei
+    uint256 maxPerWallet;
+    uint256 startTime;           // MILLISECONDS (Date.now())
+    uint256 endTime;             // MILLISECONDS
+    bytes32 merkleRoot;          // 0x00...00 for public
+    string  name;
+}
+```
+
+**Gas:** `500000`
+
+### List an NFT
+
+**Contract:** `RitualMarketplace.listItem()`
+
+```solidity
+function listItem(address nft, uint256 tokenId, uint256 price)
+```
+
+Requires: `nft.approve(marketplace, tokenId)` first.
+
+**Gas:** `200000` (approve) + `200000` (list)
+
+### Buy an NFT
+
+**Contract:** `RitualMarketplace.buyItem()`
+
+```solidity
+function buyItem(address nft, uint256 tokenId)  // payable — send price as value
+```
+
+**Gas:** `300000`
+
+### Cancel a Listing
+
+**Contract:** `RitualMarketplace.cancelListing()`
+
+```solidity
+function cancelListing(address nft, uint256 tokenId)
+```
+
+**Gas:** `100000`
+
+### Mint an NFT
+
+```solidity
+// Public mint
+function mint(uint256 phaseIndex, uint256 quantity)  // payable
+
+// Allowlist mint
+function allowlistMint(uint256 phaseIndex, uint256 quantity, bytes32[] proof)  // payable
+
+// Owner mint (free)
+function ownerMint(address to, uint256 quantity)
+```
+
+**Gas:** `200000`
+
+---
+
+## Read-Only Queries
+
+### Get All Collections
+
+```solidity
+NFTFactory.getCollections() returns (address[])
+```
+
+### Get Collection Info
+
+```solidity
+AIRitualNFT.name() returns (string)
+AIRitualNFT.symbol() returns (string)
+AIRitualNFT.totalSupply() returns (uint256)
+AIRitualNFT.baseURI() returns (string)
+AIRitualNFT.getMintPhases() returns (MintPhase[])
+```
+
+### Check Listing
+
+```solidity
+RitualMarketplace.listings(address nft, uint256 tokenId) returns (address seller, uint256 price)
+```
+
+---
+
+## Gas Limits
+
+| Operation | Gas |
 |---|---|
+| `createCollection` | `500000` |
+| `mint` / `allowlistMint` | `200000` |
+| `listItem` | `200000` |
+| `buyItem` | `300000` |
+| `cancelListing` | `100000` |
 | `setPolicy` | `100000` |
 | `requestDecision` | `500000` |
 | `directBuy` | `300000` |
 | `directList` | `200000` |
 | `directCancel` | `100000` |
-| `approveAction` | `350000` |
 
 ---
 
+## Timestamp Rule
 
-## Transaction Requirements
+Ritual Chain uses **milliseconds** for `block.timestamp`.
 
-Ritual Chain has specific transaction requirements:
+```javascript
+// CORRECT
+startTime: Date.now()
+endTime:   Date.now() + (7 * 24 * 60 * 60 * 1000)
 
-- **Legacy transactions (type 0) are recommended** for maximum compatibility. The chain supports EIP-1559 but some tooling (e.g. Hardhat's default signer) may encounter issues with type 2 transactions. If using ethers.js directly, either type works.
-- **`block.timestamp` is in milliseconds**, not seconds. All phase times must use millisecond precision.
-- **Gas:** Set `gasLimit: 500000` for collection creation, `gasLimit: 200000` for mints, `gasLimit: 300000` for marketplace operations.
-
----
-
-## 1. Deploy a New NFT Collection
-
-### Function
-
-```solidity
-NFTFactory.createCollection(
-    string name_,          // Collection name (e.g. "Ritual Spirits")
-    string symbol_,        // Token symbol (e.g. "SPIRIT")
-    string baseURI_,       // IPFS metadata base URI (e.g. "ipfs://Qm.../")
-    uint256 maxSupply_,    // Maximum number of tokens (e.g. 1000)
-    address royaltyReceiver_, // Address to receive royalty payments
-    uint96 royaltyFee_,    // Royalty in basis points (e.g. 500 = 5%, max 1000 = 10%)
-    MintPhase[] phases_    // Array of mint phases
-) returns (address clone)
+// WRONG — creates expired phases
+startTime: Math.floor(Date.now() / 1000)
 ```
 
-### MintPhase Struct
+---
 
-```solidity
-struct MintPhase {
-    uint64 startTime;     // Phase start (MILLISECONDS since epoch)
-    uint64 endTime;       // Phase end (MILLISECONDS since epoch)
-    uint128 price;        // Price per token in wei (e.g. 1000000000000000 = 0.001 RITUAL)
-    uint32 maxPerWallet;  // Max tokens per wallet in this phase (e.g. 3)
-    bytes32 merkleRoot;   // Merkle root for allowlist (0x0 for public phases)
-    bool isPublic;        // true = no proof needed, false = allowlist only
+## IPFS Metadata Format
+
+### Single Image
+```json
+{
+  "name": "Collection Name",
+  "description": "...",
+  "image": "ipfs://Qm.../image.png"
 }
 ```
 
-### Example: Create a Collection with Allowlist + Public Phase
-
-```javascript
-import { ethers } from "ethers";
-
-const factory = new ethers.Contract(
-  "0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f",
-  [
-    "function createCollection(string,string,string,uint256,address,uint96,(uint64,uint64,uint128,uint32,bytes32,bool)[]) returns (address)"
-  ],
-  signer
-);
-
-const now = Date.now(); // Ritual uses milliseconds
-
-const phases = [
-  {
-    startTime: now,
-    endTime: now + 86400000, // 24 hours
-    price: ethers.parseEther("0.001"),
-    maxPerWallet: 3,
-    merkleRoot: "0x0000000000000000000000000000000000000000000000000000000000000000",
-    isPublic: false // Allowlist phase — set merkleRoot after deployment
-  },
-  {
-    startTime: now + 86400000,
-    endTime: now + 172800000, // 48 hours
-    price: ethers.parseEther("0.002"),
-    maxPerWallet: 5,
-    merkleRoot: "0x0000000000000000000000000000000000000000000000000000000000000000",
-    isPublic: true // Public phase — anyone can mint
-  }
-];
-
-const tx = await factory.createCollection(
-  "Ritual Spirits",
-  "SPIRIT",
-  "ipfs://QmYourMetadataCID/",
-  1000, // maxSupply
-  signer.address, // royaltyReceiver
-  500, // 5% royalty
-  phases,
-  { gasLimit: 500000 }
-);
-
-const receipt = await tx.wait();
-// Parse CollectionCreated event to get the clone address
-const event = receipt.logs.find(log => {
-  try { return factory.interface.parseLog(log)?.name === "CollectionCreated"; }
-  catch { return false; }
-});
-const collectionAddress = factory.interface.parseLog(event).args.collection;
-console.log("Collection deployed at:", collectionAddress);
-```
-
----
-
-## 2. Manage Allowlists (Merkle Trees)
-
-### Generate a Merkle Root from Wallet Addresses
-
-```javascript
-import { MerkleTree } from "merkletreejs";
-import { keccak256, solidityPacked } from "ethers";
-
-const allowlist = [
-  "0x1234...abc",
-  "0x5678...def",
-  "0x9abc...012"
-];
-
-const leaves = allowlist.map(addr =>
-  keccak256(solidityPacked(["address"], [addr]))
-);
-
-const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
-const merkleRoot = tree.getHexRoot();
-```
-
-### Set the Merkle Root on a Collection
-
-```javascript
-const collection = new ethers.Contract(collectionAddress, [
-  "function setMerkleRoot(uint256 phaseId, bytes32 root)"
-], signer);
-
-await collection.setMerkleRoot(0, merkleRoot, { gasLimit: 100000 });
-```
-
-### Get a Merkle Proof for a Wallet
-
-```javascript
-const wallet = "0x1234...abc";
-const leaf = keccak256(solidityPacked(["address"], [wallet]));
-const proof = tree.getHexProof(leaf);
-// Use this proof when calling allowlistMint
-```
-
----
-
-## 3. Mint NFTs
-
-### Allowlist Mint (requires Merkle proof)
-
-```javascript
-const collection = new ethers.Contract(collectionAddress, [
-  "function allowlistMint(uint256 phaseId, uint256 quantity, bytes32[] proof) payable",
-  "function getPhase(uint256 phaseId) view returns (tuple(uint64,uint64,uint128,uint32,bytes32,bool))"
-], signer);
-
-// Get phase info to know the price
-const phase = await collection.getPhase(0);
-const pricePerToken = phase.price; // uint128
-
-const quantity = 2;
-const totalCost = pricePerToken * BigInt(quantity);
-
-await collection.allowlistMint(
-  0,        // phaseId
-  quantity, // number of tokens
-  proof,    // Merkle proof for msg.sender
-  { value: totalCost, gasLimit: 200000 }
-);
-```
-
-### Public Mint (no proof needed)
-
-```javascript
-await collection.publicMint(
-  1,        // phaseId (must be a public phase)
-  quantity,
-  { value: totalCost, gasLimit: 200000 }
-);
-```
-
-### Owner Mint (collection owner only, free)
-
-```javascript
-await collection.ownerMint(
-  recipientAddress, // who receives the tokens
-  quantity,
-  { gasLimit: 200000 }
-);
-```
-
----
-
-## 4. Trade NFTs on the Marketplace
-
-### List an NFT for Sale
-
-The seller must first approve the marketplace to transfer their NFT.
-
-```javascript
-const nft = new ethers.Contract(collectionAddress, [
-  "function setApprovalForAll(address operator, bool approved)"
-], signer);
-
-// Approve marketplace (one-time per collection)
-await nft.setApprovalForAll(
-  "0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B",
-  true,
-  { gasLimit: 100000 }
-);
-
-// List the NFT
-const marketplace = new ethers.Contract(
-  "0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B",
-  [
-    "function list(address nftContract, uint256 tokenId, uint256 price)",
-    "function buy(address nftContract, uint256 tokenId) payable",
-    "function cancelListing(address nftContract, uint256 tokenId)",
-    "function getListing(address nftContract, uint256 tokenId) view returns (tuple(address,address,uint256,uint256,bool))"
-  ],
-  signer
-);
-
-await marketplace.list(
-  collectionAddress,
-  1, // tokenId
-  ethers.parseEther("0.05"), // price in RITUAL
-  { gasLimit: 200000 }
-);
-```
-
-### Buy a Listed NFT
-
-```javascript
-const listing = await marketplace.getListing(collectionAddress, 1);
-// listing: [seller, nftContract, tokenId, price, active]
-
-await marketplace.buy(
-  collectionAddress,
-  1, // tokenId
-  { value: listing.price, gasLimit: 300000 }
-);
-```
-
-### Cancel a Listing
-
-```javascript
-await marketplace.cancelListing(
-  collectionAddress,
-  1, // tokenId
-  { gasLimit: 100000 }
-);
-```
-
----
-
-## 5. Collection Management (Owner Only)
-
-### Update Base URI (metadata reveal)
-
-```javascript
-// Ensure your contract instance includes these management ABIs:
-const collection = new ethers.Contract(collectionAddress, [
-  "function setBaseURI(string baseURI_)",
-  "function setPhaseTime(uint256 phaseId, uint64 start, uint64 end)",
-  "function addPhase(tuple(uint64,uint64,uint128,uint32,bytes32,bool) phase)",
-  "function setMerkleRoot(uint256 phaseId, bytes32 root)",
-  "function setRoyalty(address receiver, uint96 fee)",
-  "function withdraw()",
-  "function owner() view returns (address)"
-], signer);
-
-await collection.setBaseURI("ipfs://QmNewRevealedCID/", { gasLimit: 100000 });
-```
-
-### Update Phase Timing
-
-```javascript
-const newStart = Date.now(); // milliseconds
-const newEnd = Date.now() + 86400000;
-await collection.setPhaseTime(0, newStart, newEnd, { gasLimit: 100000 });
-```
-
-### Add a New Mint Phase
-
-```javascript
-const now = Date.now();
-await collection.addPhase({
-  startTime: now,
-  endTime: now + 86400000,
-  price: ethers.parseEther("0.005"),
-  maxPerWallet: 10,
-  merkleRoot: "0x0000000000000000000000000000000000000000000000000000000000000000",
-  isPublic: true
-}, { gasLimit: 150000 });
-```
-
-### Withdraw Collected Mint Funds
-
-```javascript
-await collection.withdraw({ gasLimit: 100000 });
-```
-
----
-
-## 6. Read-Only Queries
-
-### Get All Collections
-
-```javascript
-const factory = new ethers.Contract(
-  "0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f", // NFTFactory
-  [
-    "function getAllCollections() view returns (address[])",
-    "function getCollectionsByOwner(address) view returns (address[])",
-    "function totalCollections() view returns (uint256)"
-  ],
-  provider
-);
-
-const all = await factory.getAllCollections();
-const mine = await factory.getCollectionsByOwner(myAddress);
-```
-
-### Get Collection Info
-
-```javascript
-const collection = new ethers.Contract(collectionAddress, [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function maxSupply() view returns (uint256)",
-  "function totalMinted() view returns (uint256)",
-  "function totalPhases() view returns (uint256)",
-  "function getPhase(uint256) view returns (tuple(uint64,uint64,uint128,uint32,bytes32,bool))",
-  "function baseURI() view returns (string)",
-  "function owner() view returns (address)",
-  "function royaltyInfo(uint256,uint256) view returns (address,uint256)"
-], provider);
-
-const name = await collection.name();
-const minted = await collection.totalMinted();
-const supply = await collection.maxSupply();
-const phase0 = await collection.getPhase(0);
-```
-
-### Check Listing Status
-
-```javascript
-const listing = await marketplace.getListing(collectionAddress, tokenId);
-const isActive = listing.active;
-const price = listing.price;
-```
-
----
-
-## 7. IPFS Metadata Format
-
-The Cauldron uses standard ERC-721 metadata stored on IPFS.
-
-### Single-Image Collection
-
-Set `baseURI` to the raw IPFS CID of the image:
-```
-ipfs://QmSingleImageCID
-```
-
-### Multi-Token Collection
-
-Set `baseURI` to a folder with trailing slash:
-```
-ipfs://QmFolderCID/
-```
-
-Each token's metadata is at `{baseURI}{tokenId}` and should follow:
-
+### Multi-Token (baseURI = `ipfs://QmHash/`)
+Each token file: `0.json`, `1.json`, etc.
 ```json
 {
-  "name": "Ritual Spirit #1",
-  "description": "A spirit born from the Ritual Chain.",
-  "image": "ipfs://QmImageCID",
+  "name": "Token #0",
+  "description": "...",
+  "image": "ipfs://Qm.../0.png",
   "attributes": [
-    { "trait_type": "Element", "value": "Fire" },
-    { "trait_type": "Rarity", "value": "Legendary" }
+    {"trait_type": "Rarity", "value": "Legendary"}
   ]
 }
 ```
 
 ---
 
-## 8. Backend API (Optional)
+## Agent Workflow Examples
 
-The Cauldron has an indexing backend for faster queries:
+### Buy an NFT via Chat
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/collections` | GET | All indexed collections |
-| `/collections/:address` | GET | Collection details |
-| `/collections/:address/tokens` | GET | All tokens in a collection |
-| `/listings` | GET | Active marketplace listings (query: `?seller=0x...&limit=50&offset=0`) |
-| `/merkle/generate` | POST | Generate Merkle root from `{ addresses: string[] }` or `{ csv: string }` |
-| `/merkle/:root/:address` | GET | Get Merkle proof for a wallet against a given root |
+User says: *"Buy token #5 from collection 0xABC for 0.03 RITUAL"*
 
-**Base URL:** Configured via `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (default: `http://localhost:3001`)
+Agent runs:
+```bash
+curl -X POST http://localhost:8888/api/buy \
+  -H "Content-Type: application/json" \
+  -d '{"nft":"0xABC...","tokenId":5,"price":"0.03"}'
+```
 
-All core operations work directly on-chain without the backend. The backend is optional and provides faster indexed queries.
+### List an NFT via Chat
 
----
+User says: *"List my NFT #12 from 0xDEF at 0.1 RITUAL"*
 
-## 9. Common Agent Workflows
+Agent runs:
+```bash
+curl -X POST http://localhost:8888/api/list \
+  -H "Content-Type: application/json" \
+  -d '{"nft":"0xDEF...","tokenId":12,"price":"0.1"}'
+```
 
-### Workflow A: Deploy and Launch a Collection
+### Check Agent Status
 
-1. Upload art to IPFS (use Pinata or `ipfs add`)
-2. Call `factory.createCollection(...)` with name, symbol, baseURI, supply, royalty, phases
-3. Parse the `CollectionCreated` event for the new collection address
-4. Generate Merkle tree from allowlist wallets
-5. Call `collection.setMerkleRoot(phaseId, root)` to set the allowlist
-6. Share the mint link: `https://the-cauldron.vercel.app/mint/{collectionAddress}`
+Agent runs:
+```bash
+curl http://localhost:8888/api/info
+```
 
-### Workflow B: Manage an Existing Collection
-
-1. Read current state: `collection.getPhase(0)`, `collection.totalMinted()`
-2. Update allowlist: generate new Merkle root → `setMerkleRoot(phaseId, newRoot)`
-3. Adjust timing: `setPhaseTime(phaseId, newStart, newEnd)` (milliseconds)
-4. Add public phase: `addPhase({...isPublic: true})`
-5. Reveal metadata: `setBaseURI("ipfs://QmRevealedCID/")`
-
-### Workflow C: Trade NFTs
-
-1. Check ownership: `nft.ownerOf(tokenId)`
-2. Approve marketplace: `nft.setApprovalForAll(marketplaceAddress, true)`
-3. List: `marketplace.list(nftContract, tokenId, price)`
-4. Monitor: `marketplace.getListing(nftContract, tokenId)`
-5. Cancel if needed: `marketplace.cancelListing(nftContract, tokenId)`
-
-### Workflow D: Analyze a Collection
-
-1. Get all collections: `factory.getAllCollections()`
-2. For each: read `name()`, `totalMinted()`, `maxSupply()`, `totalPhases()`
-3. Calculate mint progress: `totalMinted / maxSupply * 100`
-4. Check phase status: compare `getPhase(i).startTime/endTime` with `Date.now()`
-5. Report findings
+Response includes balance, mode, spend ceiling, and action count.
 
 ---
 
-## 10. Error Reference
+## Error Reference
 
 | Error | Cause | Fix |
 |---|---|---|
-| `MaxSupplyExceeded` | Mint would exceed maxSupply | Reduce quantity |
-| `PhaseNotActive` | Current time outside phase window | Check timestamps (milliseconds!) |
-| `PhaseNotPublic` | Called publicMint on an allowlist phase | Use allowlistMint with proof |
-| `InvalidProof` | Merkle proof doesn't match root | Regenerate proof for correct address |
-| `WalletLimitExceeded` | Wallet already minted max for this phase | Check mintedPerWalletPerPhase |
-| `InsufficientPayment` | msg.value < price × quantity | Send correct amount |
-| `NotTokenOwner` | Trying to list NFT you don't own | Verify ownership first |
-| `NotApproved` | Marketplace not approved to transfer | Call setApprovalForAll first |
-| `AlreadyListed` | Token is already listed | Cancel existing listing first |
-| `NotSeller` | Trying to cancel listing you didn't create | Only seller can cancel |
+| `transaction type not supported` | Using EIP-1559 on Ritual | Remove `type` field, use `gasPrice` |
+| `InsufficientFunds` | Not enough RITUAL | Fund the hot wallet |
+| `NotOwner` | Wrong wallet calling owner functions | Use the contract owner's key |
+| `ExceedsSpendCeiling` | Price > agent's spend ceiling | Update policy via dashboard |
+| `ActionNotAllowed` | Policy blocks this action type | Enable buy/list/cancel in policy |
+| `503 No execution engine` | Server started without `--key` | Restart with `--key` flag |
 
 ---
 
-## Autonomous Cauldron Agent
+## Security
 
-When the user asks for an autonomous Cauldron agent, build a **disclosed Ritual-native agent**, not a hidden human impersonator.
-
-### Agent Identity Rules
-
-The agent must:
-- **Clearly identify itself** as an autonomous agent in UI, prompts, logs, and outputs
-- **Never claim to be human** or conceal its agent nature
-- **Never bypass wallet policy** or execute hidden transactions
-- If a user asks for "human-like" or "indistinguishable from human," interpret as: **high-agency, natural, autonomous, and capable** while preserving disclosure
-
-### Agent Capabilities
-
-The agent must be able to:
-- **See** — Cauldron state: collections, listings, wallet NFTs, ownership, mint phases, approvals, prices, and wallet limits
-- **Think** — with policy: spend ceiling, confidence threshold, allowed actions, verification status, wallet ownership, gas limits, and Ritual millisecond timestamps
-- **Do** — reviewable on-chain actions: deploy collection, mint, buy, list, cancel listing, approve marketplace, set allowlist root, update metadata, or withdraw funds
-
-### Agent Spend Enforcement
-
-- Agent **MUST** check spend against policy ceiling **BEFORE** submitting any transaction
-- Agent **MUST NOT** auto-approve transactions exceeding the configured max spend
-- Default mode **MUST** be `supervised` (require human approval), not `autonomous`
-- `dry-run` mode must be tested before enabling autonomous execution
-- If the operator wallet balance drops below the minimum threshold, halt all autonomous actions
-
-### Ritual Agent Infrastructure
-
-| System Contract | Address | Purpose |
-|---|---|---|
-| **Sovereign Agent** (precompile) | `0x000000000000000000000000000000000000080C` | One-shot reasoning/jobs — best for MVP |
-| **SovereignAgentFactory** | `0x9dC4C054e53bCc4Ce0A0Ff09E890A7a8e817f304` | Production launch — deploys deterministic agent harnesses |
-| **Persistent Agent** (precompile) | `0x0000000000000000000000000000000000000820` | Long-lived identity/memory — for stateful agents |
-| **Scheduler** | `0x56e776BAE2DD60664b69Bd5F865F1180ffB7D58B` | Recurring operations (e.g. auto-list, auto-buy) |
-| **RitualWallet** | `0x532F0dF0896F353d8C3DD8cc134e8129DA2a3948` | Fee management for agent compute |
-| **TEEServiceRegistry** | `0x9644e8562cE0Fe12b4deeC4163c064A8862Bf47F` | Executor discovery for TEE-backed verification |
-| **AsyncDelivery** | `0x5A16214fF555848411544b005f7Ac063742f39F6` | Callback router — `msg.sender` in callbacks |
-
-### Required Build Flow
-
-When building an autonomous Cauldron agent:
-
-1. **Add `/agent` frontend route** with agent dashboard UI
-2. **Add agent policy controls:**
-   - Operator wallet address
-   - Mode: `autonomous` / `supervised` / `dry-run`
-   - Max spend per action (in RITUAL)
-   - Min confidence threshold (0-100)
-   - Action toggles: allow buy / list / cancel / mint / deploy
-3. **Read Cauldron state** via backend API + on-chain contract reads:
-   - `factory.getAllCollections()` — all collections
-   - `collection.getPhase(i)` — mint phase status
-   - `marketplace.getListing(contract, tokenId)` — listing status
-   - `collection.mintedPerWalletPerPhase(phaseId, wallet)` — wallet limits
-4. **Predict deterministic agent harness** with `SovereignAgentFactory` using `(owner, userSalt)`
-5. **Discover a healthy executor** with `TEEServiceRegistry.getServicesByCapability(0, true)`
-6. **Check RitualWallet funding:**
-   - `balanceOf(operator)` — has enough to cover compute
-   - `lockUntil(operator)` — not currently locked
-7. **Require provider/model/DA/secrets** before autonomous scheduling
-8. **Deploy harness** only from the operator wallet with explicit `gas: 3000000n`
-9. **Keep all marketplace and mint actions wallet-controlled** unless the user explicitly enables autonomous execution policy
-
-### Agent Architecture Tiers
-
-| Tier | Use Case | Precompile | Complexity |
-|---|---|---|---|
-| **Tier 1: Sovereign** | One-shot tasks ("analyze this collection", "mint the cheapest NFT") | `0x080C` | Low — single tx, callback with result |
-| **Tier 2: Factory-Backed** | Production agents with deterministic addresses | `SovereignAgentFactory` | Medium — deploy harness, then interact |
-| **Tier 3: Persistent** | Long-lived agents with memory and identity | `0x0820` | High — stateful, requires agent key management |
-| **Tier 4: Scheduled** | Recurring operations ("check floor price every hour") | Scheduler + Sovereign | High — combines scheduler with agent actions |
-
-### Example: Sovereign Agent Call for Collection Analysis
-
-```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import {PrecompileConsumer} from "@anthropic/ritual-contracts/PrecompileConsumer.sol";
-
-contract CauldronAgent is PrecompileConsumer {
-    address public constant SOVEREIGN_AGENT = 0x000000000000000000000000000000000000080C;
-    address public constant ASYNC_DELIVERY = 0x5A16214fF555848411544b005f7Ac063742f39F6;
-
-    event AgentTaskSubmitted(bytes32 indexed taskId, string prompt);
-    event AgentTaskCompleted(bytes32 indexed taskId, string result);
-
-    modifier onlyAsyncDelivery() {
-        require(msg.sender == ASYNC_DELIVERY, "Only AsyncDelivery");
-        _;
-    }
-
-    function analyzeCollection(address collection) external {
-        string memory prompt = string(abi.encodePacked(
-            "Analyze the NFT collection at ", toHexString(collection),
-            " on Ritual Chain. Report: name, total minted, max supply, ",
-            "active phases, floor price from marketplace listings, ",
-            "and a recommendation (buy/wait/skip)."
-        ));
-
-        bytes32 taskId = keccak256(abi.encodePacked(collection, block.timestamp));
-        emit AgentTaskSubmitted(taskId, prompt);
-
-        // Submit to Sovereign Agent precompile
-        (bool success,) = SOVEREIGN_AGENT.call(
-            abi.encodeWithSignature(
-                "runAgent(string,bytes)",
-                prompt,
-                abi.encode(taskId)
-            )
-        );
-        require(success, "Agent submission failed");
-    }
-
-    function handleCallback(bytes32 taskId, string calldata result) 
-        external onlyAsyncDelivery 
-    {
-        emit AgentTaskCompleted(taskId, result);
-        // Process result: update on-chain state, trigger actions, etc.
-    }
-}
-```
-
-### Ritual Skill References
-
-For deeper agent integration, load these Ritual skills:
-
-| Feature | Skill File |
-|---|---|
-| Agent execution (Sovereign/Persistent) | `skills/ritual-dapp-agents/SKILL.md` |
-| Precompile ABI reference | `skills/ritual-dapp-precompiles/SKILL.md` |
-| Scheduling | `skills/ritual-dapp-scheduler/SKILL.md` |
-| Fee management | `skills/ritual-dapp-wallet/SKILL.md` |
-| Secrets & encryption | `skills/ritual-dapp-secrets/SKILL.md` |
-| Chain architecture & async lifecycle | `skills/ritual-dapp-overview/SKILL.md` |
-| Consumer contract patterns | `skills/ritual-dapp-contracts/SKILL.md` |
-
----
-
-## Important Notes
-
-1. **Timestamps are in MILLISECONDS** on Ritual Chain, not seconds. Always use `Date.now()` (not `Math.floor(Date.now() / 1000)`).
-2. **Legacy transactions are recommended.** Set `type: 0` or omit the type field for maximum compatibility. EIP-1559 works with ethers.js but may fail with some tooling (Hardhat deployer).
-3. **Token IDs start at 1**, not 0 (ERC721A with `_startTokenId() = 1`).
-4. **Royalty max is 10%** (1000 basis points). Values above 1000 will revert with `RoyaltyTooHigh`.
-5. **The marketplace is escrow-less.** NFTs stay in the seller's wallet until purchased. The seller must keep their approval active.
-6. **Platform fee** is deducted from the sale price along with royalties. The seller receives the remainder.
-
----
-
-## Agent Safety Rules
-
-1. **Never use second-based timestamps on Ritual Chain.** Always use `Date.now()` or millisecond values for mint phase `startTime`/`endTime`. Dividing by 1000 will create phases that expired decades ago.
-2. **Use explicit gas limits for every transaction:**
-   - Collection creation: `500000`
-   - Minting: `200000`
-   - Marketplace operations: `300000`
-   - Admin functions (setMerkleRoot, setBaseURI, etc.): `100000`
-3. **Treat `0x` + 64 hex characters as a private key**, not a wallet address. Addresses are 40 hex chars. Never log, print, or expose private keys.
-4. **Never commit private keys.** They must only exist in `.env` files which are excluded by `.gitignore`.
-5. **Validate all allowlist addresses** with `ethers.isAddress()` before generating Merkle trees. Invalid addresses silently produce invalid roots.
-6. **Do not deploy allowlist phases with a zero Merkle root** (`0x0000...0000`). An allowlist phase with no root will reject every mint. Set the root via `setMerkleRoot()` after deployment, or use a public phase instead.
-7. **Always verify deployed contract code** with `eth_getCode` before interacting. If it returns `0x`, the contract doesn't exist at that address.
-8. **Check phase timing before minting.** Read `getPhase(phaseId)` and compare `startTime`/`endTime` against `Date.now()` to avoid `PhaseNotActive` reverts.
-9. **Check wallet mint limits** via `mintedPerWalletPerPhase(phaseId, walletAddress)` before attempting a mint to avoid `WalletLimitExceeded` reverts.
-10. **Approve the marketplace before listing.** Call `nft.setApprovalForAll(marketplaceAddress, true)` before `marketplace.list()`. Listing without approval will revert with `NotApproved`.
-11. **Human-likeness means high-agency, not deception.** If a user asks for "human-like" or "indistinguishable from human," build an autonomous agent that is natural, capable, and high-agency — but always discloses it is an agent. Never build identity concealment, fake-human behavior, or deceptive systems.
-12. **Sanitize on-chain data in agent prompts.** When constructing prompts from collection names, descriptions, or metadata, strip newlines, control characters, and instruction-like patterns. Never pass raw on-chain strings directly into agent prompts — a malicious deployer could inject prompt overrides.
-13. **Verify checkpoint integrity.** Do not blindly trust `.ritual-build/progress.json` from a previous session. Re-verify at least one marker, always re-read safety rules, and reject `next_file` values containing `..` or absolute paths.
-
----
-
-## Agent Implementation Checklist
-
-When editing this repo, agents must check **all active transaction paths**, not only `frontend/app/create/page.tsx`.
-
-### Transaction Surfaces
-
-All files containing `writeContract` calls:
-
-| File | Transactions |
-|---|---|
-| `frontend/app/create/page.tsx` | `createCollection` |
-| `frontend/components/deploy/DeployWizard.tsx` | `createCollection` |
-| `frontend/app/mint/[address]/page.tsx` | `publicMint`, `allowlistMint` |
-| `frontend/app/explore/page.tsx` | `marketplace.buy` |
-| `frontend/app/collection/[address]/[tokenId]/page.tsx` | `buy`, `list`, `cancelListing`, `setApprovalForAll` |
-| `frontend/app/profile/[address]/page.tsx` | `cancelListing` |
-
-### Required Transaction Gas
-
-| Function | Gas |
-|---|---|
-| `createCollection` | `500000n` |
-| `publicMint` | `200000n` |
-| `allowlistMint` | `200000n` |
-| `marketplace.buy` | `300000n` |
-| `marketplace.list` | `200000n` |
-| `marketplace.cancelListing` | `100000n` |
-| `setApprovalForAll` | `100000n` |
-| `setMerkleRoot`, `setBaseURI`, `setPhaseTime`, `withdraw` | `100000n` |
-
-### Required Timestamp Rule
-
-- Search for `Date.now() / 1000`
-- Search for `Math.floor(Date.now() / 1000)`
-- Replace second-based phase timestamps with millisecond values
-- Mint phase `startTime` and `endTime` must use `Date.now()` or millisecond math
-
-### Required Allowlist Rule
-
-- Validate allowlist entries with `isAddress` from `viem` or `ethers.isAddress`
-- Do **not** use `address.startsWith("0x")` as validation
-- Never deploy an allowlist phase with `zeroHash` as the Merkle root
-- If a Merkle proof lookup fails or returns `valid: false`, do **not** call `allowlistMint`
-
-### Required Safety Rule
-
-- Treat `0x` + 64 hex characters as a private key, not a wallet address
-- Never print it back
-- Never use it unless it is explicitly placed in a local `.env` file by the user
-
-### Required Verification
-
-- Check chain ID is `1979`
-- Check bytecode exists at:
-  - `0xCeD6f5eA4b8e9D448fF732Ef44267D6cbD9F750f` (Factory)
-  - `0x9cDB207D834c1c5FE3b1777fC360eC4473f5A38B` (Marketplace)
-  - `0xBCea72054CEd720c797501fdA3Eb07866C12d67b` (Implementation)
-- Run build/test commands if `npm`, `npx`, and `cast` are available
-- If they are unavailable, say exactly which commands were blocked
+- **Never use your main wallet's private key** — create a dedicated hot wallet
+- **Fund the hot wallet with small amounts** — only what the agent needs
+- **Policy is on-chain** — even if the server is compromised, the contract enforces spend ceilings
+- **SUPERVISED mode** is default — switch to AUTONOMOUS only when confident
+- The agent **always identifies itself as an agent** — never impersonates a human
