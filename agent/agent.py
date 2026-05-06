@@ -468,14 +468,22 @@ async function connect(){
 async function deploy(){
   if(!signer){log("Connect first","err");return}
   document.getElementById("btn-deploy").disabled=true;document.getElementById("btn-deploy").textContent="Deploying...";
-  try{log("Fetching artifact...","inf");const res=await fetch("/artifact");if(!res.ok)throw new Error("CauldronAgent.json not found");
-  const art=await res.json();log("Sending deploy tx...","inf");
-  const f=new ethers.ContractFactory(art.abi,art.bytecode,signer);
-  const tx=await f.deploy(MARKET,FACTORY,CEILING,{gasLimit:5000000n});
-  log("Tx: "+tx.deploymentTransaction().hash,"inf");log("Waiting...","inf");await tx.waitForDeployment();
-  const addr=await tx.getAddress();log("Deployed: "+addr,"ok");
-  document.getElementById("deployed-addr").textContent=addr;document.getElementById("cmd-addr").textContent=addr;
-  document.getElementById("done-box").style.display="block";document.getElementById("btn-deploy").textContent="Deployed";
+  try{
+    log("Fetching artifact...","inf");
+    const res=await fetch("/artifact");if(!res.ok)throw new Error("CauldronAgent.json not found");
+    const art=await res.json();
+    log("Encoding constructor args...","inf");
+    const iface=new ethers.Interface(art.abi);
+    const encodedArgs=iface.encodeDeploy([MARKET,FACTORY,CEILING]);
+    const deployData=art.bytecode+encodedArgs.slice(2);
+    log("Sending raw deploy tx (no type field)...","inf");
+    const tx=await signer.sendTransaction({to:null,data:deployData,gasLimit:5000000n});
+    log("Tx: "+tx.hash,"inf");log("Waiting for confirmation...","inf");
+    const receipt=await tx.wait();
+    const addr=receipt.contractAddress;
+    log("Deployed: "+addr,"ok");
+    document.getElementById("deployed-addr").textContent=addr;document.getElementById("cmd-addr").textContent=addr;
+    document.getElementById("done-box").style.display="block";document.getElementById("btn-deploy").textContent="Deployed";
   }catch(e){log("Failed: "+e.message,"err");document.getElementById("btn-deploy").disabled=false;document.getElementById("btn-deploy").textContent="Retry"}}
 log("Ready. Connect MetaMask to begin.","inf");
 </script></body></html>"""
