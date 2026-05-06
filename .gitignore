@@ -38,3 +38,4 @@ contracts/deployed-addresses.json
 
 # Debug scripts
 contracts/scripts/debug-contract.js
+__pycache__/
