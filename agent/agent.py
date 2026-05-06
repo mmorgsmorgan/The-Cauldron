@@ -21,6 +21,7 @@ import http.server
 import json
 import os
 import re
+import socketserver
 import sys
 import urllib.request
 
@@ -470,7 +471,7 @@ async function deploy(){
   try{log("Fetching artifact...","inf");const res=await fetch("/artifact");if(!res.ok)throw new Error("CauldronAgent.json not found");
   const art=await res.json();log("Sending deploy tx...","inf");
   const f=new ethers.ContractFactory(art.abi,art.bytecode,signer);
-  const tx=await f.deploy(MARKET,FACTORY,CEILING,{gasLimit:5000000n,gasPrice:1000000007n,type:0});
+  const tx=await f.deploy(MARKET,FACTORY,CEILING,{gasLimit:5000000n});
   log("Tx: "+tx.deploymentTransaction().hash,"inf");log("Waiting...","inf");await tx.waitForDeployment();
   const addr=await tx.getAddress();log("Deployed: "+addr,"ok");
   document.getElementById("deployed-addr").textContent=addr;document.getElementById("cmd-addr").textContent=addr;
@@ -586,7 +587,9 @@ def main():
     print(f"[agent] Serving at http://localhost:{args.port}")
     print(f"[agent] Press Ctrl+C to stop.\n")
 
-    server = http.server.HTTPServer(("", args.port), AgentHandler)
+    class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        daemon_threads = True
+    server = ThreadedServer(("", args.port), AgentHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
