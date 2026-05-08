@@ -2,11 +2,31 @@
 
 export default function AgentPage() {
   return (
-    <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-      <h1 className="text-4xl font-black mb-4 gradient-text">Your Autonomous Agent</h1>
+    <div className="max-w-3xl mx-auto px-4 py-12 text-center">
+      {/* Pro Mode Banner */}
+      <a href="/agent/pro" className="block glass-card p-5 mb-8 text-left group transition-all"
+        style={{ borderColor: "rgba(255,29,206,0.15)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full text-[10px] font-semibold mb-2"
+              style={{ background: "rgba(255,29,206,0.1)", border: "1px solid rgba(255,29,206,0.2)", color: "#FF1DCE" }}>
+              {"\u25C7"} NEW
+            </div>
+            <div className="text-sm font-bold" style={{ color: "var(--mint)" }}>
+              Pro Mode — Native Ritual Agent
+            </div>
+            <div className="text-xs mt-1" style={{ color: "rgba(200,247,197,0.4)" }}>
+              Deploy on-chain. Runs in TEE. No Python, no hot wallet. One MetaMask transaction.
+            </div>
+          </div>
+          <div className="text-lg transition-transform group-hover:translate-x-1" style={{ color: "rgba(200,247,197,0.3)" }}>{"\u2192"}</div>
+        </div>
+      </a>
+
+      <h1 className="text-4xl font-black mb-4 gradient-text">Local Agent (Tier 1)</h1>
       <p className="text-lg mb-10" style={{ color: "rgba(200,247,197,0.6)" }}>
         Your AI agent reads SKILL.md, learns the platform, and trades NFTs on your behalf.
-        No cloning. No setup. Just point your agent to the skill file.
+        Run locally with full control over execution.
       </p>
 
       {/* Step 1 */}
