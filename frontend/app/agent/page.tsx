@@ -40,7 +40,7 @@ export default function AgentPage() {
   const { address, isConnected } = useAccount();
   const { executor, executorCount, isLoading: executorLoading } = useExecutorDiscovery();
   const { isLocked } = useSenderLock();
-  const { deploy, status, txHash, isConfirming, isSuccess, error, reset } = useDeployAgent();
+  const { deploy, status, txHash, isConfirming, isSuccess, isFailed, error, reset } = useDeployAgent();
   const { agents, refresh } = useMyAgents();
 
   const [strategy, setStrategy] = useState<AgentStrategy>(DEFAULT_STRATEGY);

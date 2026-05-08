@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useAccount, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { useState, useCallback, useEffect } from "react";
+import { useAccount, usePublicClient, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { encodeFunctionData, keccak256, toBytes } from "viem";
 import {
   SOVEREIGN_FACTORY,
@@ -110,60 +110,44 @@ export type DeployStatus =
 
 export function useDeployAgent() {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
   const { sendTransactionAsync } = useSendTransaction();
   const [status, setStatus] = useState<DeployStatus>("idle");
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [harnessAddress, setHarnessAddress] = useState<`0x${string}` | undefined>();
   const [error, setError] = useState<string | undefined>();
+  const [strategyRef, setStrategyRef] = useState<AgentStrategy | null>(null);
 
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+  const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({
     hash: txHash,
     query: { enabled: !!txHash },
   });
 
-  const deploy = useCallback(async (strategy: AgentStrategy) => {
-    if (!address) {
-      setError("Connect wallet first");
+  // Check receipt status when it arrives
+  const isSuccess = receipt?.status === "success";
+  const isFailed = receipt?.status === "reverted";
+
+  useEffect(() => {
+    if (!receipt || !address || !strategyRef) return;
+
+    if (receipt.status === "reverted") {
+      setStatus("error");
+      setError("Transaction reverted on-chain. The factory may require more gas or different parameters.");
       return;
     }
 
-    try {
-      setStatus("generating_salt");
-      setError(undefined);
-
-      // Generate deterministic salt from user address + timestamp
-      const saltInput = `${address}-${Date.now()}-${strategy.mode}`;
-      const userSalt = keccak256(toBytes(saltInput));
-
-      setStatus("deploying");
-
-      // Deploy harness via factory
-      const data = encodeFunctionData({
-        abi: SOVEREIGN_FACTORY_ABI,
-        functionName: "deployHarness",
-        args: [userSalt],
-      });
-
-      const hash = await sendTransactionAsync({
-        to: SOVEREIGN_FACTORY,
-        data,
-        gas: 500_000n,
-      });
-
-      setTxHash(hash);
-      setStatus("confirming");
-
-      // Store agent info locally
-      const funding = calculateFunding(strategy);
+    if (receipt.status === "success") {
+      // Store agent info locally only on confirmed success
+      const funding = calculateFunding(strategyRef);
       const agentInfo = {
         owner: address,
-        userSalt,
-        txHash: hash,
+        txHash,
+        harnessAddress: harnessAddress || "pending",
         strategy: {
-          ...strategy,
-          maxPricePerNFT: strategy.maxPricePerNFT.toString(),
-          totalBudget: strategy.totalBudget.toString(),
-          apiKey: "", // never persist plaintext key
+          ...strategyRef,
+          maxPricePerNFT: strategyRef.maxPricePerNFT.toString(),
+          totalBudget: strategyRef.totalBudget.toString(),
+          apiKey: "",
         },
         funding: {
           total: funding.total.toString(),
@@ -174,12 +158,45 @@ export function useDeployAgent() {
         status: "deployed",
       };
 
-      // Save to localStorage
       const agents = JSON.parse(localStorage.getItem("cauldron_agents") || "[]");
       agents.push(agentInfo);
       localStorage.setItem("cauldron_agents", JSON.stringify(agents));
 
       setStatus("success");
+    }
+  }, [receipt, address, strategyRef, txHash, harnessAddress]);
+
+  const deploy = useCallback(async (strategy: AgentStrategy) => {
+    if (!address) {
+      setError("Connect wallet first");
+      return;
+    }
+
+    try {
+      setStatus("generating_salt");
+      setError(undefined);
+      setStrategyRef(strategy);
+
+      const saltInput = `${address}-${Date.now()}-${strategy.mode}`;
+      const userSalt = keccak256(toBytes(saltInput));
+
+      setStatus("deploying");
+
+      const data = encodeFunctionData({
+        abi: SOVEREIGN_FACTORY_ABI,
+        functionName: "deployHarness",
+        args: [userSalt],
+      });
+
+      // Factory CREATE2 deployment needs higher gas
+      const hash = await sendTransactionAsync({
+        to: SOVEREIGN_FACTORY,
+        data,
+        gas: 1_500_000n,
+      });
+
+      setTxHash(hash);
+      setStatus("confirming");
     } catch (err: unknown) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Deploy failed");
@@ -193,12 +210,14 @@ export function useDeployAgent() {
     harnessAddress,
     isConfirming,
     isSuccess,
+    isFailed,
     error,
     reset: () => {
       setStatus("idle");
       setTxHash(undefined);
       setHarnessAddress(undefined);
       setError(undefined);
+      setStrategyRef(null);
     },
   };
 }
