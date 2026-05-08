@@ -9,6 +9,12 @@ export const PERSISTENT_FACTORY = "0xD4AA9D55215dc8149Af57605e70921Ea16b73591" a
 export const TEE_SERVICE_REGISTRY = "0x9644e8562cE0Fe12b4deeC4163c064A8862Bf47F" as const;
 export const RITUAL_WALLET = "0x532F0dF0896F353d8C3DD8cc134e8129DA2a3948" as const;
 export const ASYNC_JOB_TRACKER = "0xC069FFCa0389f44eCA2C626e55491b0ab045AEF5" as const;
+export const ASYNC_DELIVERY = "0x5A16214fF555848411544b005f7Ac063742f39F6" as const;
+export const SCHEDULER = "0x56e776BAE2DD60664b69Bd5F865F1180ffB7D58B" as const;
+
+// ── Agent Skill File ──
+export const AGENT_SKILL_URL = "https://raw.githubusercontent.com/mmorgsmorgan/The-Cauldron/main/AGENT_SKILL.md" as const;
+export const AGENT_SKILL_REPO = "mmorgsmorgan/The-Cauldron" as const;
 
 // ── Agent Modes ──
 export type AgentMode = "scout" | "operator" | "sentinel";

@@ -9,6 +9,7 @@ import {
   DEFAULT_STRATEGY,
   calculateFunding,
   buildPrompt,
+  AGENT_SKILL_URL,
 } from "@/lib/agent-factory";
 import { MARKETPLACE_ADDRESS } from "@/lib/contracts";
 import {
@@ -82,6 +83,23 @@ export default function AgentPage() {
           Deploy an autonomous NFT agent directly on Ritual Chain.
           Runs in TEE. No Python. No hot wallet. One MetaMask transaction.
         </p>
+      </div>
+
+      {/* Skill File Reference */}
+      <div className="glass-card p-4 mb-4 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold"
+            style={{ background: "rgba(255,29,206,0.1)", color: "#FF1DCE" }}>{"\u2630"}</div>
+          <div>
+            <div className="font-semibold" style={{ color: "rgba(200,247,197,0.6)" }}>Agent Skill File</div>
+            <div style={{ color: "rgba(200,247,197,0.3)", fontFamily: "JetBrains Mono, monospace", fontSize: 10 }}>AGENT_SKILL.md — teaches the TEE executor how to trade on The Cauldron</div>
+          </div>
+        </div>
+        <a href={AGENT_SKILL_URL} target="_blank" rel="noopener noreferrer"
+          className="px-3 py-1.5 rounded-lg font-semibold transition-all"
+          style={{ border: "1px solid rgba(255,29,206,0.15)", color: "#FF1DCE", fontSize: 10 }}>
+          View Skill
+        </a>
       </div>
 
       {/* Executor Status */}
