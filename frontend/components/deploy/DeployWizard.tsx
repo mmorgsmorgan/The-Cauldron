@@ -199,7 +199,7 @@ export default function DeployWizard() {
       args: [name, symbol, finalBaseURI, BigInt(imageMode === "multi" ? multiImages.length : maxSupply), recipient as `0x${string}`,
         BigInt(Math.round(parseFloat(royaltyFee) * 100)),
         phases],
-      gas: 500000n,
+      gas: 1500000n,
     });
   }
 

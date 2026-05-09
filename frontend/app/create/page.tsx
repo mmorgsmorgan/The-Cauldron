@@ -56,7 +56,7 @@ export default function CreatePage() {
     writeContract({
       address: FACTORY_ADDRESS, abi: NFTFactory_ABI, functionName: "createCollection",
       args: [name, symbol, baseURI, BigInt(maxSupply), address, BigInt(Math.round(parseFloat(royaltyFee) * 100)), phases],
-      gas: 500000n,
+      gas: 1500000n,
     });
   }
 
