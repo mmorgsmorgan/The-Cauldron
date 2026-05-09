@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useAccount, usePublicClient, useReadContract, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
-import { encodeFunctionData, keccak256, toBytes } from "viem";
+import { encodeFunctionData, keccak256, toBytes, decodeAbiParameters } from "viem";
 import {
   SOVEREIGN_FACTORY,
   SOVEREIGN_FACTORY_ABI,
+  SOVEREIGN_HARNESS_ABI,
   TEE_SERVICE_REGISTRY,
   TEE_REGISTRY_ABI,
   ASYNC_JOB_TRACKER,
@@ -14,7 +15,11 @@ import {
   RITUAL_WALLET_ABI,
   type AgentStrategy,
   calculateFunding,
+  buildSovereignParams,
+  buildScheduleConfig,
+  buildRollingConfig,
 } from "@/lib/agent-factory";
+import { MARKETPLACE_ADDRESS } from "@/lib/contracts";
 
 // ── Executor Discovery ──
 export function useExecutorDiscovery() {
@@ -22,7 +27,7 @@ export function useExecutorDiscovery() {
     address: TEE_SERVICE_REGISTRY,
     abi: TEE_REGISTRY_ABI,
     functionName: "getServicesByCapability",
-    args: [0, true], // HTTP_CALL capability, check validity
+    args: [0, true],
   });
 
   const executors = data as Array<{
@@ -98,13 +103,13 @@ export function useRitualWalletBalance(address?: `0x${string}`) {
   };
 }
 
-// ── Deploy Agent ──
+// ── Deploy Agent (Two-Step: deployHarness → configureFundAndStart) ──
 export type DeployStatus =
   | "idle"
-  | "generating_salt"
-  | "predicting"
-  | "deploying"
-  | "confirming"
+  | "deploying_harness"
+  | "confirming_harness"
+  | "configuring"
+  | "confirming_config"
   | "success"
   | "error";
 
@@ -114,35 +119,89 @@ export function useDeployAgent() {
   const { sendTransactionAsync } = useSendTransaction();
   const [status, setStatus] = useState<DeployStatus>("idle");
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [configTxHash, setConfigTxHash] = useState<`0x${string}` | undefined>();
   const [harnessAddress, setHarnessAddress] = useState<`0x${string}` | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [strategyRef, setStrategyRef] = useState<AgentStrategy | null>(null);
 
-  const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({
+  // Watch harness deploy receipt
+  const { data: harnessReceipt } = useWaitForTransactionReceipt({
     hash: txHash,
-    query: { enabled: !!txHash },
+    query: { enabled: !!txHash && status === "confirming_harness" },
   });
 
-  // Check receipt status when it arrives
-  const isSuccess = receipt?.status === "success";
-  const isFailed = receipt?.status === "reverted";
+  // Watch config receipt
+  const { data: configReceipt, isLoading: isConfirming } = useWaitForTransactionReceipt({
+    hash: configTxHash,
+    query: { enabled: !!configTxHash && status === "confirming_config" },
+  });
 
+  const isSuccess = configReceipt?.status === "success";
+  const isFailed = harnessReceipt?.status === "reverted" || configReceipt?.status === "reverted";
+
+  const { executor: executorAddress } = useExecutorDiscovery();
+
+  // Step 2: after harness is deployed, call configureFundAndStart
   useEffect(() => {
-    if (!receipt || !address || !strategyRef) return;
+    if (!harnessReceipt || !address || !strategyRef || !executorAddress || !publicClient) return;
+    if (status !== "confirming_harness") return;
 
-    if (receipt.status === "reverted") {
+    if (harnessReceipt.status === "reverted") {
       setStatus("error");
-      setError("Transaction reverted on-chain. The factory may require more gas or different parameters.");
+      setError("Harness deployment reverted. Check gas or factory state.");
       return;
     }
 
-    if (receipt.status === "success") {
-      // Store agent info locally only on confirmed success
+    if (harnessReceipt.status === "success") {
+      // Extract harness address from logs
+      const deployLog = harnessReceipt.logs.find(
+        l => l.address.toLowerCase() === SOVEREIGN_FACTORY.toLowerCase()
+      );
+
+      let harness: `0x${string}` | undefined;
+      if (deployLog && deployLog.topics[3]) {
+        // HarnessDeployed event: topics[1]=owner, topics[2]=userSalt, topics[3]=childSalt, data=harness
+        // Actually the harness address is in the data field
+        try {
+          const decoded = decodeAbiParameters(
+            [{ type: "address" }],
+            deployLog.data as `0x${string}`
+          );
+          harness = decoded[0] as `0x${string}`;
+        } catch {
+          // Fallback: predict harness from receipt
+        }
+      }
+
+      if (!harness) {
+        setStatus("error");
+        setError("Could not extract harness address from deploy receipt.");
+        return;
+      }
+
+      setHarnessAddress(harness);
+      configureHarness(harness, strategyRef, executorAddress);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [harnessReceipt]);
+
+  // Step 2 effect: persist on config success
+  useEffect(() => {
+    if (!configReceipt || !address || !strategyRef) return;
+
+    if (configReceipt.status === "reverted") {
+      setStatus("error");
+      setError("configureFundAndStart reverted. Ensure sufficient scheduler funding.");
+      return;
+    }
+
+    if (configReceipt.status === "success") {
       const funding = calculateFunding(strategyRef);
       const agentInfo = {
         owner: address,
-        txHash,
-        harnessAddress: harnessAddress || "pending",
+        harnessAddress,
+        deployTxHash: txHash,
+        configTxHash,
         strategy: {
           ...strategyRef,
           maxPricePerNFT: strategyRef.maxPricePerNFT.toString(),
@@ -151,11 +210,10 @@ export function useDeployAgent() {
         },
         funding: {
           total: funding.total.toString(),
-          executionFees: funding.executionFees.toString(),
-          tradingBudget: funding.tradingBudget.toString(),
+          schedulerFunding: funding.schedulerFunding.toString(),
         },
         deployedAt: Date.now(),
-        status: "deployed",
+        status: "running",
       };
 
       const agents = JSON.parse(localStorage.getItem("cauldron_agents") || "[]");
@@ -164,8 +222,52 @@ export function useDeployAgent() {
 
       setStatus("success");
     }
-  }, [receipt, address, strategyRef, txHash, harnessAddress]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configReceipt]);
 
+  const configureHarness = async (
+    harness: `0x${string}`,
+    strategy: AgentStrategy,
+    executor: `0x${string}`,
+  ) => {
+    try {
+      setStatus("configuring");
+
+      const params = buildSovereignParams(
+        strategy,
+        executor,
+        harness,
+        MARKETPLACE_ADDRESS,
+      );
+      const schedule = buildScheduleConfig(strategy);
+      const rolling = buildRollingConfig(strategy);
+      const lockDuration = 0n;
+
+      const funding = calculateFunding(strategy);
+
+      const data = encodeFunctionData({
+        abi: SOVEREIGN_HARNESS_ABI,
+        functionName: "configureFundAndStart",
+        args: [params, schedule, rolling, lockDuration],
+      });
+
+      // configureFundAndStart needs >= 3M gas and schedulerFunding as msg.value
+      const hash = await sendTransactionAsync({
+        to: harness,
+        data,
+        value: funding.schedulerFunding,
+        gas: 4_000_000n,
+      });
+
+      setConfigTxHash(hash);
+      setStatus("confirming_config");
+    } catch (err: unknown) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Configure failed");
+    }
+  };
+
+  // Step 1: deploy harness
   const deploy = useCallback(async (strategy: AgentStrategy) => {
     if (!address) {
       setError("Connect wallet first");
@@ -173,14 +275,15 @@ export function useDeployAgent() {
     }
 
     try {
-      setStatus("generating_salt");
+      setStatus("deploying_harness");
       setError(undefined);
       setStrategyRef(strategy);
+      setTxHash(undefined);
+      setConfigTxHash(undefined);
+      setHarnessAddress(undefined);
 
       const saltInput = `${address}-${Date.now()}-${strategy.mode}`;
       const userSalt = keccak256(toBytes(saltInput));
-
-      setStatus("deploying");
 
       const data = encodeFunctionData({
         abi: SOVEREIGN_FACTORY_ABI,
@@ -188,7 +291,7 @@ export function useDeployAgent() {
         args: [userSalt],
       });
 
-      // Factory CREATE2 deployment needs higher gas
+      // deployHarness uses CREATE3 (~400K gas)
       const hash = await sendTransactionAsync({
         to: SOVEREIGN_FACTORY,
         data,
@@ -196,7 +299,7 @@ export function useDeployAgent() {
       });
 
       setTxHash(hash);
-      setStatus("confirming");
+      setStatus("confirming_harness");
     } catch (err: unknown) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Deploy failed");
@@ -206,7 +309,7 @@ export function useDeployAgent() {
   return {
     deploy,
     status,
-    txHash,
+    txHash: configTxHash || txHash,
     harnessAddress,
     isConfirming,
     isSuccess,
@@ -215,6 +318,7 @@ export function useDeployAgent() {
     reset: () => {
       setStatus("idle");
       setTxHash(undefined);
+      setConfigTxHash(undefined);
       setHarnessAddress(undefined);
       setError(undefined);
       setStrategyRef(null);
@@ -236,7 +340,6 @@ export function useMyAgents() {
     setAgents(mine);
   }, [address]);
 
-  // Refresh on mount
   useState(() => { refresh(); });
 
   return { agents, refresh };

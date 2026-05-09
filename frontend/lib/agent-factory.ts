@@ -1,6 +1,8 @@
 /**
- * Agent Factory — Sovereign Agent integration for The Cauldron Pro Mode.
- * Uses SovereignAgentFactory (0x9dC4...7304) to deploy agent harnesses.
+ * Agent Factory — Sovereign Agent integration for The Cauldron.
+ * Built from ritual-dapp-agents SKILL.md (factory-backed, two-step deploy).
+ *
+ * Flow: deployHarness(salt) → configureFundAndStart(params, schedule, rolling, lockDuration)
  */
 
 // ── System Addresses ──
@@ -14,7 +16,6 @@ export const SCHEDULER = "0x56e776BAE2DD60664b69Bd5F865F1180ffB7D58B" as const;
 
 // ── Agent Skill File ──
 export const AGENT_SKILL_URL = "https://raw.githubusercontent.com/mmorgsmorgan/The-Cauldron/main/AGENT_SKILL.md" as const;
-export const AGENT_SKILL_REPO = "mmorgsmorgan/The-Cauldron" as const;
 
 // ── Agent Modes ──
 export type AgentMode = "scout" | "operator" | "sentinel";
@@ -30,17 +31,17 @@ export interface AgentStrategy {
   autonomous: boolean;
   llmProvider: "anthropic" | "openai" | "gemini" | "ritual";
   model: string;
-  apiKey: string; // plaintext — encrypted before on-chain submission
-  frequency: number;      // blocks between calls (default: 2000)
-  windowNumCalls: number; // calls per window (default: 5)
+  apiKey: string;
+  frequency: number;
+  windowNumCalls: number;
 }
 
 // ── Default Strategy ──
 export const DEFAULT_STRATEGY: AgentStrategy = {
   mode: "scout",
   collections: [],
-  maxPricePerNFT: 50000000000000000n, // 0.05 RITUAL
-  totalBudget: 500000000000000000n,    // 0.5 RITUAL
+  maxPricePerNFT: 50000000000000000n,
+  totalBudget: 500000000000000000n,
   autoList: false,
   autoListMultiplier: 2.0,
   autonomous: true,
@@ -56,6 +57,7 @@ export function calculateFunding(strategy: AgentStrategy): {
   executionFees: bigint;
   tradingBudget: bigint;
   buffer: bigint;
+  schedulerFunding: bigint;
   total: bigint;
 } {
   const GAS_PER_EXECUTION = 3_000_000n;
@@ -64,6 +66,8 @@ export function calculateFunding(strategy: AgentStrategy): {
 
   const baseCalls = strategy.mode === "scout" ? 1n : BigInt(strategy.windowNumCalls);
   const executionFees = baseCalls * COST_PER_CALL;
+  // Scheduler needs funding deposited into harness RitualWallet
+  const schedulerFunding = executionFees * 2n; // 2x for safety
   const buffer = (executionFees * 20n) / 100n;
   const tradingBudget = strategy.totalBudget;
 
@@ -71,7 +75,8 @@ export function calculateFunding(strategy: AgentStrategy): {
     executionFees,
     tradingBudget,
     buffer,
-    total: executionFees + tradingBudget + buffer,
+    schedulerFunding,
+    total: executionFees + tradingBudget + buffer + schedulerFunding,
   };
 }
 
@@ -116,11 +121,62 @@ RULES:
 }
 
 function formatRitual(wei: bigint): string {
-  const eth = Number(wei) / 1e18;
-  return eth.toFixed(4);
+  return (Number(wei) / 1e18).toFixed(4);
 }
 
-// ── TEEServiceRegistry ABI (executor discovery) ──
+// ═══════════════════════════════════════════════════
+// ABIs — sourced from ritual-dapp-agents SKILL.md
+// ═══════════════════════════════════════════════════
+
+// ── Shared struct components ──
+const StorageRefComponents = [
+  { name: "platform", type: "string" },
+  { name: "path", type: "string" },
+  { name: "keyRef", type: "string" },
+] as const;
+
+const SovereignAgentParamsComponents = [
+  { name: "executor", type: "address" },
+  { name: "ttl", type: "uint256" },
+  { name: "userPublicKey", type: "bytes" },
+  { name: "pollIntervalBlocks", type: "uint64" },
+  { name: "maxPollBlock", type: "uint64" },
+  { name: "taskIdMarker", type: "string" },
+  { name: "deliveryTarget", type: "address" },
+  { name: "deliverySelector", type: "bytes4" },
+  { name: "deliveryGasLimit", type: "uint256" },
+  { name: "deliveryMaxFeePerGas", type: "uint256" },
+  { name: "deliveryMaxPriorityFeePerGas", type: "uint256" },
+  { name: "cliType", type: "uint16" },
+  { name: "prompt", type: "string" },
+  { name: "encryptedSecrets", type: "bytes" },
+  { name: "convoHistory", type: "tuple", components: StorageRefComponents },
+  { name: "output", type: "tuple", components: StorageRefComponents },
+  { name: "skills", type: "tuple[]", components: StorageRefComponents },
+  { name: "systemPrompt", type: "tuple", components: StorageRefComponents },
+  { name: "model", type: "string" },
+  { name: "tools", type: "string[]" },
+  { name: "maxTurns", type: "uint16" },
+  { name: "maxTokens", type: "uint32" },
+  { name: "rpcUrls", type: "string" },
+] as const;
+
+const SovereignScheduleConfigComponents = [
+  { name: "schedulerGas", type: "uint32" },
+  { name: "frequency", type: "uint32" },
+  { name: "schedulerTtl", type: "uint32" },
+  { name: "maxFeePerGas", type: "uint256" },
+  { name: "maxPriorityFeePerGas", type: "uint256" },
+  { name: "value", type: "uint256" },
+] as const;
+
+const SovereignRollingConfigComponents = [
+  { name: "windowNumCalls", type: "uint32" },
+  { name: "rolloverThresholdBps", type: "uint16" },
+  { name: "rolloverRetryEveryCalls", type: "uint16" },
+] as const;
+
+// ── TEEServiceRegistry ABI ──
 export const TEE_REGISTRY_ABI = [
   {
     name: "getServicesByCapability",
@@ -153,8 +209,15 @@ export const TEE_REGISTRY_ABI = [
   },
 ] as const;
 
-// ── SovereignAgentFactory ABI (deploy) ──
+// ── SovereignAgentFactory ABI ──
 export const SOVEREIGN_FACTORY_ABI = [
+  {
+    name: "deployHarness",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "userSalt", type: "bytes32" }],
+    outputs: [{ name: "harness", type: "address" }],
+  },
   {
     name: "predictHarness",
     type: "function",
@@ -169,15 +232,76 @@ export const SOVEREIGN_FACTORY_ABI = [
     ],
   },
   {
-    name: "deployHarness",
+    name: "getDkmsDerivation",
     type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "userSalt", type: "bytes32" }],
-    outputs: [{ name: "harness", type: "address" }],
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "userSalt", type: "bytes32" },
+    ],
+    outputs: [
+      { name: "dkmsOwner", type: "address" },
+      { name: "keyIndex", type: "uint256" },
+      { name: "keyFormat", type: "uint8" },
+    ],
   },
 ] as const;
 
-// ── AsyncJobTracker ABI (status tracking) ──
+// ── SovereignAgentHarness ABI (child deployed by factory) ──
+export const SOVEREIGN_HARNESS_ABI = [
+  {
+    name: "configureFundAndStart",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "params", type: "tuple", components: SovereignAgentParamsComponents },
+      { name: "schedule", type: "tuple", components: SovereignScheduleConfigComponents },
+      { name: "rolling", type: "tuple", components: SovereignRollingConfigComponents },
+      { name: "schedulerLockDuration", type: "uint256" },
+    ],
+    outputs: [{ name: "schedulerCallId", type: "uint256" }],
+  },
+  {
+    name: "onSovereignAgentResult",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "bytes32" },
+      { name: "result", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "owner",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    name: "configured",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    name: "stop",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    name: "restart",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+] as const;
+
+// ── AsyncJobTracker ABI ──
 export const ASYNC_JOB_TRACKER_ABI = [
   {
     type: "event", name: "JobAdded",
@@ -234,3 +358,71 @@ export const RITUAL_WALLET_ABI = [
     stateMutability: "payable",
   },
 ] as const;
+
+// ── onSovereignAgentResult selector for deliverySelector ──
+export const DELIVERY_SELECTOR = "0x8ca12055" as `0x${string}`;
+
+// ── Build SovereignAgentParams from strategy ──
+export function buildSovereignParams(
+  strategy: AgentStrategy,
+  executorAddress: `0x${string}`,
+  harnessAddress: `0x${string}`,
+  marketplaceAddress: `0x${string}`,
+  encryptedSecrets: `0x${string}` = "0x",
+) {
+  const prompt = buildPrompt(strategy, marketplaceAddress);
+
+  const emptyRef = { platform: "", path: "", keyRef: "" };
+  const skillRef = {
+    platform: "github",
+    path: "mmorgsmorgan/The-Cauldron/main/AGENT_SKILL.md",
+    keyRef: "",
+  };
+
+  return {
+    executor: executorAddress,
+    ttl: 500n,
+    userPublicKey: "0x" as `0x${string}`,
+    pollIntervalBlocks: 10n,
+    maxPollBlock: 0n,
+    taskIdMarker: "",
+    deliveryTarget: harnessAddress,
+    deliverySelector: DELIVERY_SELECTOR,
+    deliveryGasLimit: 500_000n,
+    deliveryMaxFeePerGas: 2_000_000_000n,
+    deliveryMaxPriorityFeePerGas: 1_000_000_000n,
+    cliType: 0,
+    prompt,
+    encryptedSecrets,
+    convoHistory: emptyRef,
+    output: emptyRef,
+    skills: [skillRef],
+    systemPrompt: emptyRef,
+    model: strategy.model,
+    tools: [] as string[],
+    maxTurns: 5,
+    maxTokens: 4096,
+    rpcUrls: "https://rpc.ritualfoundation.org",
+  };
+}
+
+// ── Build schedule config ──
+export function buildScheduleConfig(strategy: AgentStrategy) {
+  return {
+    schedulerGas: 3_000_000,
+    frequency: strategy.frequency,
+    schedulerTtl: 500,
+    maxFeePerGas: 2_000_000_000n,
+    maxPriorityFeePerGas: 1_000_000_000n,
+    value: 0n,
+  };
+}
+
+// ── Build rolling config ──
+export function buildRollingConfig(strategy: AgentStrategy) {
+  return {
+    windowNumCalls: strategy.windowNumCalls,
+    rolloverThresholdBps: 5000,
+    rolloverRetryEveryCalls: 1,
+  };
+}

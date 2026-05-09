@@ -333,9 +333,11 @@ export default function AgentPage() {
               cursor: canDeploy ? "pointer" : "not-allowed",
             }}>
             {status === "idle" ? `Deploy ${strategy.mode.charAt(0).toUpperCase() + strategy.mode.slice(1)} Agent` :
-              status === "deploying" ? "Deploying..." :
-              status === "confirming" ? "Confirming..." :
-              status === "success" ? "\u2713 Agent Deployed" :
+              status === "deploying_harness" ? "Deploying Harness..." :
+              status === "confirming_harness" ? "Confirming Harness..." :
+              status === "configuring" ? "Configuring Agent..." :
+              status === "confirming_config" ? "Starting Agent..." :
+              status === "success" ? "\u2713 Agent Running" :
               status === "error" ? "Failed — Try Again" :
               "Processing..."}
           </button>
